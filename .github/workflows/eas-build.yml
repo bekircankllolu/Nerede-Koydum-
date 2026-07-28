@@ -1,0 +1,55 @@
+name: EAS Build
+
+# Bu workflow'u GitHub'da Actions sekmesinden "Run workflow" ile elle
+# başlatırsın. Bilgisayarında terminal gerekmez.
+#
+# Ön koşul: repo ayarlarında EXPO_TOKEN secret'i tanımlı olmalı.
+# Token'ı expo.dev > Account settings > Access tokens sayfasından üretip
+# Settings > Secrets and variables > Actions > New repository secret
+# yolundan EXPO_TOKEN adıyla eklemelisin.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Derlenecek platform
+        type: choice
+        default: android
+        options:
+          - android
+          - ios
+          - all
+      profile:
+        description: eas.json içindeki build profili
+        type: choice
+        default: development
+        options:
+          - development
+          - preview
+          - production
+
+jobs:
+  build:
+    name: ${{ inputs.platform }} / ${{ inputs.profile }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repoyu çek
+        uses: actions/checkout@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: EAS kur
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Bağımlılıkları yükle
+        run: npm ci
+
+      - name: Derle
+        run: eas build --non-interactive --no-wait --platform ${{ inputs.platform }} --profile ${{ inputs.profile }}
