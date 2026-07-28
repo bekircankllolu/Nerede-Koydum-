@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Koydum",
+    "slug": "koydum-app",
+    "version": "1.0.0",
+    "scheme": "koydum",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F7F5F0",
+    "ios": {
+      "bundleIdentifier": "com.koydum.app",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Eşya adını veya konumunu sesle kaydedebilmek için mikrofona ihtiyaç var.",
+        "NSSpeechRecognitionUsageDescription": "Söylediklerini yazıya çevirmek için konuşma tanımaya ihtiyaç var.",
+        "NSCameraUsageDescription": "Eşyanın fotoğrafını çekebilmek için kameraya ihtiyaç var.",
+        "NSPhotoLibraryUsageDescription": "Galeriden fotoğraf seçebilmek için galeriye ihtiyaç var."
+      }
+    },
+    "android": {
+      "package": "com.koydum.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#E7E3DA",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Eşya adını veya konumunu sesle kaydedebilmek için mikrofona ihtiyaç var.",
+          "speechRecognitionPermission": "Söylediklerini yazıya çevirmek için konuşma tanımaya ihtiyaç var."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Galeriden fotoğraf seçebilmek için galeriye ihtiyaç var.",
+          "cameraPermission": "Eşyanın fotoğrafını çekebilmek için kameraya ihtiyaç var."
+        }
+      ]
+    ]
+  }
+}
