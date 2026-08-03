@@ -35,6 +35,11 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "extra": {
+      "eas": {
+        "projectId": "2ad46f8a-d252-4d57-8e46-349c15d6fc1d"
+      }
+    },
     "plugins": [
       [
         "expo-speech-recognition",
