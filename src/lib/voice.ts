@@ -1,8 +1,27 @@
 import { useCallback, useRef, useState } from 'react';
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
+
+type SpeechApi = typeof import('expo-speech-recognition');
+
+// expo-speech-recognition, modül gövdesinde requireNativeModule çağırıyor, yani
+// native modül yoksa import anında patlıyor. Expo Go bu modülü içermediği için
+// statik import uygulamayı daha açılırken çökertirdi; burada yakalayıp sesi
+// kapatılmış halde devam ediyoruz.
+let speech: SpeechApi | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  speech = require('expo-speech-recognition') as SpeechApi;
+} catch {
+  speech = null;
+}
+
+export const isVoiceAvailable = speech !== null;
+
+const noopEvent: (...args: unknown[]) => void = () => {};
+const useSpeechEvent = (speech?.useSpeechRecognitionEvent ??
+  noopEvent) as (...args: unknown[]) => void;
+
+const UNAVAILABLE_MESSAGE =
+  'Ses tanıma bu sürümde kullanılamıyor. Derlenmiş uygulamada çalışır.';
 
 export type VoiceStage = 'idle' | 'listening' | 'processing' | 'done' | 'no-speech' | 'error';
 
@@ -21,12 +40,12 @@ export function useVoiceRecognition() {
   const [state, setState] = useState<VoiceState>(IDLE);
   const finalizedRef = useRef(false);
 
-  useSpeechRecognitionEvent('start', () => {
+  useSpeechEvent('start', () => {
     finalizedRef.current = false;
     setState({ stage: 'listening', transcript: '', errorMessage: null });
   });
 
-  useSpeechRecognitionEvent('result', (event) => {
+  useSpeechEvent('result', (event: { results: { transcript: string }[]; isFinal: boolean }) => {
     const best = event.results[0]?.transcript ?? '';
     if (event.isFinal) {
       finalizedRef.current = true;
@@ -41,7 +60,7 @@ export function useVoiceRecognition() {
     }
   });
 
-  useSpeechRecognitionEvent('end', () => {
+  useSpeechEvent('end', () => {
     setState((s) => {
       if (finalizedRef.current) return s.stage === 'done' ? s : { ...s, stage: 'done' };
       if (!s.transcript) return { stage: 'no-speech', transcript: '', errorMessage: null };
@@ -50,19 +69,23 @@ export function useVoiceRecognition() {
     });
   });
 
-  useSpeechRecognitionEvent('error', (event) => {
+  useSpeechEvent('error', (event: { message?: string; error: string }) => {
     setState({ stage: 'error', transcript: '', errorMessage: event.message || event.error });
   });
 
   const start = useCallback(async () => {
+    if (!speech) {
+      setState({ stage: 'error', transcript: '', errorMessage: UNAVAILABLE_MESSAGE });
+      return;
+    }
     setState(IDLE);
-    const perms = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    const perms = await speech.ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!perms.granted) {
       setState({ stage: 'error', transcript: '', errorMessage: 'İzin verilmedi.' });
       return;
     }
     finalizedRef.current = false;
-    ExpoSpeechRecognitionModule.start({
+    speech.ExpoSpeechRecognitionModule.start({
       lang: 'tr-TR',
       interimResults: true,
       continuous: false,
@@ -71,11 +94,11 @@ export function useVoiceRecognition() {
   }, []);
 
   const stop = useCallback(() => {
-    ExpoSpeechRecognitionModule.stop();
+    speech?.ExpoSpeechRecognitionModule.stop();
   }, []);
 
   const reset = useCallback(() => {
-    ExpoSpeechRecognitionModule.abort();
+    speech?.ExpoSpeechRecognitionModule.abort();
     setState(IDLE);
   }, []);
 
