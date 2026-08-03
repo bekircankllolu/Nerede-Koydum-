@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from './src/theme';
-import { CekmeceProvider, useCekmece } from './src/state/CekmeceContext';
+import { DepoProvider, useDepo } from './src/state/DepoContext';
 import { Spinner } from './src/components/common';
 import TabBar from './src/components/TabBar';
 import Toast from './src/components/Toast';
@@ -18,7 +18,7 @@ import VoicePanel from './src/screens/VoicePanel';
 import PaywallScreen from './src/screens/PaywallScreen';
 
 function Root() {
-  const { booting, screen, showOnboarding, selected, addOpen, moveOpen, voiceTarget, paywall } = useCekmece();
+  const { booting, screen, showOnboarding, selected, addOpen, moveOpen, voiceTarget, paywall } = useDepo();
 
   if (booting) {
     return (
@@ -54,9 +54,9 @@ function Root() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <CekmeceProvider>
+      <DepoProvider>
         <Root />
-      </CekmeceProvider>
+      </DepoProvider>
     </SafeAreaProvider>
   );
 }

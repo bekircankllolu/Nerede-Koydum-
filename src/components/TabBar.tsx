@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme';
-import { useCekmece } from '../state/CekmeceContext';
+import { useDepo } from '../state/DepoContext';
 import { TabFindIcon, TabItemsIcon, TabSettingsIcon } from './icons';
 
 const TABS: { key: 'find' | 'items' | 'settings'; label: string; Icon: typeof TabFindIcon }[] = [
@@ -12,7 +12,7 @@ const TABS: { key: 'find' | 'items' | 'settings'; label: string; Icon: typeof Ta
 ];
 
 export default function TabBar() {
-  const { screen, nav, accent } = useCekmece();
+  const { screen, nav, accent } = useDepo();
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>

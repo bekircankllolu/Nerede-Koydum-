@@ -20,16 +20,16 @@ const FILTER_DEFS: { key: FilterKey; label: string }[] = [
 ];
 
 const ONB_STEPS = [
-  { title: 'Bir daha evi baştan aşağı arama.', body: 'Nadiren kullandığın eşyalar hep kaybolur. Çekmece onları senin yerine hatırlar.', chips: ['Pasaport', 'Yedek anahtar', 'Kablolar'], cta: 'Devam' },
+  { title: 'Bir daha evi baştan aşağı arama.', body: 'Nadiren kullandığın eşyalar hep kaybolur. Depo onları senin yerine hatırlar.', chips: ['Pasaport', 'Yedek anahtar', 'Kablolar'], cta: 'Devam' },
   { title: 'Koyarken söyle.', body: 'Fotoğrafını çek ve nereye koyduğunu kaydet. On saniyeden kısa sürer.', chips: ['Pasaport', '→', 'Yatak odası', '→', 'Üst çekmece'], cta: 'Devam' },
-  { title: 'Gerektiğinde sor.', body: '"Pasaport nerede?" de, Çekmece sana göstersin.', chips: null as string[] | null, cta: 'İlk eşyamı kaydet' },
+  { title: 'Gerektiğinde sor.', body: '"Pasaport nerede?" de, Depo sana göstersin.', chips: null as string[] | null, cta: 'İlk eşyamı kaydet' },
 ];
 
 function daysSince(it: Item, now: number) {
   return daysBetween(it.updatedAt, now);
 }
 
-export function useCekmeceStore() {
+export function useDepoStore() {
   const [booting, setBooting] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [isPro, setIsPro] = useState(false);
@@ -278,7 +278,7 @@ export function useCekmeceStore() {
     setIsPro(true);
     await db.setMeta('isPro', '1');
     setPaywall(false);
-    flash('Satın alma geri yüklendi.', 'Çekmece Pro yeniden etkin.');
+    flash('Satın alma geri yüklendi.', 'Depo Pro yeniden etkin.');
   }
 
   const listed = useMemo(() => {
@@ -401,17 +401,17 @@ export function useCekmeceStore() {
   };
 }
 
-export type CekmeceStore = ReturnType<typeof useCekmeceStore>;
+export type DepoStore = ReturnType<typeof useDepoStore>;
 
-const CekmeceCtx = createContext<CekmeceStore | null>(null);
+const DepoCtx = createContext<DepoStore | null>(null);
 
-export function CekmeceProvider({ children }: { children: React.ReactNode }) {
-  const store = useCekmeceStore();
-  return <CekmeceCtx.Provider value={store}>{children}</CekmeceCtx.Provider>;
+export function DepoProvider({ children }: { children: React.ReactNode }) {
+  const store = useDepoStore();
+  return <DepoCtx.Provider value={store}>{children}</DepoCtx.Provider>;
 }
 
-export function useCekmece(): CekmeceStore {
-  const ctx = useContext(CekmeceCtx);
-  if (!ctx) throw new Error('useCekmece must be used within CekmeceProvider');
+export function useDepo(): DepoStore {
+  const ctx = useContext(DepoCtx);
+  if (!ctx) throw new Error('useDepo must be used within DepoProvider');
   return ctx;
 }

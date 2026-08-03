@@ -3,7 +3,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
-import { useCekmece } from '../state/CekmeceContext';
+import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, MicButton } from '../components/common';
 import { PhotoIcon } from '../components/icons';
 
@@ -28,7 +28,7 @@ export default function AddItemScreen() {
     closeAdd, addName, setAddName, addLoc, setAddLoc, addNote, setAddNote,
     noteOpen, setNoteOpen, addPhotoUri, setAddPhotoUri, locSuggestions,
     startVoice, saveItem,
-  } = useCekmece();
+  } = useDepo();
 
   const canSave = addName.trim().length > 0 && addLoc.trim().length > 0;
 

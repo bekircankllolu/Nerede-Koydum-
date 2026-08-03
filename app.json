@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Çekmece",
-    "slug": "cekmece-app",
+    "name": "Depo",
+    "slug": "depo-app",
     "version": "1.0.0",
-    "scheme": "cekmece",
+    "scheme": "depo",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F7F5F0",
     "ios": {
-      "bundleIdentifier": "com.cekmece.app",
+      "bundleIdentifier": "com.depo.app",
       "supportsTablet": false,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Eşya adını veya konumunu sesle kaydedebilmek için mikrofona ihtiyaç var.",
@@ -19,7 +19,7 @@
       }
     },
     "android": {
-      "package": "com.cekmece.app",
+      "package": "com.depo.app",
       "adaptiveIcon": {
         "backgroundColor": "#E7E3DA",
         "foregroundImage": "./assets/android-icon-foreground.png",

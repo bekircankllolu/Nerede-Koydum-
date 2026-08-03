@@ -1,11 +1,11 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radii, FREE_ITEM_LIMIT } from '../theme';
-import { useCekmece } from '../state/CekmeceContext';
+import { useDepo } from '../state/DepoContext';
 import ItemRow from '../components/ItemRow';
 
 export default function ItemsScreen() {
-  const { items, listed, filter, setFilter, filterDefs, card, isPro, accent } = useCekmece();
+  const { items, listed, filter, setFilter, filterDefs, card, isPro, accent } = useDepo();
   const countLabel = `${items.length} eşya${isPro ? '' : ` · ücretsiz sınır ${FREE_ITEM_LIMIT}`}`;
 
   return (

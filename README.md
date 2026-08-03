@@ -1,4 +1,4 @@
-# Çekmece — Eşya Hafızası
+# Depo — Eşya Hafızası
 
 Nadiren kullandığın eşyaları nereye koyduğunu hatırlayan mobil uygulama. Eşyayı kaydederken fotoğrafını çek, yerini söyle; sonra "Pasaport nerede?" diye sor.
 
@@ -12,7 +12,7 @@ React Native (Expo) ile yazıldı, iOS ve Android'de çalışır.
 - **Eşya detayı** — Bulunduğu yer, not, konum geçmişi. "Konumu doğrula" ile kaydı tazele, "Yerini değiştir" ile yeni konuma taşı (eskisi geçmişe düşer).
 - **Eşyalar** — Tümü / Son eklenenler / Favoriler / Yatak odası / Fotoğrafsızlar filtreleri.
 - **Onboarding** — 3 adımlık tanıtım, ilk açılışta bir kez.
-- **Çekmece Pro** — Ücretsiz sınır 20 eşya; sonrasında paywall.
+- **Depo Pro** — Ücretsiz sınır 20 eşya; sonrasında paywall.
 
 Tüm veriler cihazda saklanır. Hesap gerekmez, sunucuya bir şey gitmez.
 
@@ -58,7 +58,7 @@ eas build --profile development --platform android
 App.tsx                    Ekran yönlendirme ve katman sırası
 src/
   theme.ts                 Renk, köşe yarıçapı, ücretsiz sınır
-  state/CekmeceContext.tsx Tüm uygulama durumu ve iş mantığı
+  state/DepoContext.tsx    Tüm uygulama durumu ve iş mantığı
   db/index.ts              SQLite şeması, seed verisi, CRUD
   lib/
     search.ts              Türkçe normalizasyon, skorlama, tarih biçimleme

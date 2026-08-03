@@ -18,7 +18,7 @@ export type Item = {
   history: HistoryEntry[]; // newest first
 };
 
-const DB_NAME = 'cekmece.db';
+const DB_NAME = 'depo.db';
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {

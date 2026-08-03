@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, FREE_ITEM_LIMIT } from '../theme';
-import { useCekmece } from '../state/CekmeceContext';
+import { useDepo } from '../state/DepoContext';
 import { CheckIcon } from '../components/icons';
 
 const FEATURES = [
@@ -15,7 +15,7 @@ const FEATURES = [
 ];
 
 export default function PaywallScreen() {
-  const { closePaywall, buyPro, restorePro } = useCekmece();
+  const { closePaywall, buyPro, restorePro } = useDepo();
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -27,7 +27,7 @@ export default function PaywallScreen() {
         <View style={{ gap: 12 }}>
           <Text style={styles.title}>Her şeyin yerini hatırla.</Text>
           <Text style={styles.subtitle}>
-            {`Ücretsiz hesabında ${FREE_ITEM_LIMIT} eşya kaydettin. Çekmece Pro ile sınırsız devam et.`}
+            {`Ücretsiz hesabında ${FREE_ITEM_LIMIT} eşya kaydettin. Depo Pro ile sınırsız devam et.`}
           </Text>
         </View>
         <View style={{ gap: 11 }}>

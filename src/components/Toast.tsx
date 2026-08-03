@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radii } from '../theme';
-import { useCekmece } from '../state/CekmeceContext';
+import { useDepo } from '../state/DepoContext';
 
 export default function Toast() {
-  const { toast } = useCekmece();
+  const { toast } = useDepo();
   if (!toast) return null;
   return (
     <View style={styles.wrap} pointerEvents="none">

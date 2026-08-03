@@ -1,13 +1,13 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radii } from '../theme';
-import { useCekmece } from '../state/CekmeceContext';
+import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, MicButton } from '../components/common';
 import ItemRow from '../components/ItemRow';
 import { CloseIcon, PlusIcon, SearchIcon } from '../components/icons';
 
 export default function FindScreen() {
-  const { q, setQ, results, card, startVoice, recent, goItems, openAdd, createFromQuery } = useCekmece();
+  const { q, setQ, results, card, startVoice, recent, goItems, openAdd, createFromQuery } = useDepo();
 
   const hasQuery = q.trim().length > 0;
   const best = results.length ? results[0] : null;
