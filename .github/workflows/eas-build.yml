@@ -22,10 +22,11 @@ on:
       profile:
         description: eas.json içindeki build profili
         type: choice
-        default: development
+        default: preview
         options:
-          - development
           - preview
+          - preview-ios-simulator
+          - development
           - production
 
 jobs:
