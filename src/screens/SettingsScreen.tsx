@@ -1,10 +1,10 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radii } from '../theme';
-import { useKoydum } from '../state/KoydumContext';
+import { useDepo } from '../state/DepoContext';
 
 export default function SettingsScreen() {
-  const { isPro, openPaywall } = useKoydum();
+  const { isPro, openPaywall } = useDepo();
 
   const rows: { label: string; value: string; danger?: boolean }[] = [
     { label: 'Verileri dışa aktar', value: isPro ? 'CSV' : 'Pro' },
@@ -21,7 +21,7 @@ export default function SettingsScreen() {
       <Text style={styles.title}>Ayarlar</Text>
 
       <Pressable style={styles.proCard} onPress={openPaywall}>
-        <Text style={styles.proTitle}>{isPro ? 'Koydum Pro · etkin' : 'Koydum Pro’ya geç'}</Text>
+        <Text style={styles.proTitle}>{isPro ? 'Depo Pro · etkin' : 'Depo Pro’ya geç'}</Text>
         <Text style={styles.proSub}>
           {isPro ? 'Sınırsız eşya, konum geçmişi ve dışa aktarma açık.' : 'Sınırsız eşya, aile paylaşımı, dışa aktarma. Tek seferlik ödeme.'}
         </Text>

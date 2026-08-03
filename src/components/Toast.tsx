@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radii } from '../theme';
-import { useKoydum } from '../state/KoydumContext';
+import { useDepo } from '../state/DepoContext';
 
 export default function Toast() {
-  const { toast } = useKoydum();
+  const { toast } = useDepo();
   if (!toast) return null;
   return (
     <View style={styles.wrap} pointerEvents="none">

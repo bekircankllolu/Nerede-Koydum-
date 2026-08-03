@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
-import { useKoydum } from '../state/KoydumContext';
+import { useDepo } from '../state/DepoContext';
 import { PrimaryButton } from '../components/common';
 
 function OnboardingGlyph() {
@@ -18,7 +18,7 @@ function OnboardingGlyph() {
 }
 
 export default function OnboardingScreen() {
-  const { onbData, onbStep, onbDotsCount, onbNext, onbSkip, accent } = useKoydum();
+  const { onbData, onbStep, onbDotsCount, onbNext, onbSkip, accent } = useDepo();
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.top}>

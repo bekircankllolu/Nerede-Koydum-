@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
-import { useKoydum } from '../state/KoydumContext';
+import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, SecondaryButton } from '../components/common';
 import { MicIcon } from '../components/icons';
 import Waveform from '../components/Waveform';
@@ -16,7 +16,7 @@ const COPY: Record<string, { title: string; hint: string }> = {
 };
 
 export default function VoicePanel() {
-  const { voice, voiceRetry, voiceUse, accent } = useKoydum();
+  const { voice, voiceRetry, voiceUse, accent } = useDepo();
   const copy = COPY[voice.stage] || COPY.listening;
   const showWave = voice.stage === 'listening' || voice.stage === 'processing';
   const showResult = voice.stage === 'done';
