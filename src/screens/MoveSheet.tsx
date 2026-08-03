@@ -2,11 +2,11 @@ import React from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
-import { useKoydum } from '../state/KoydumContext';
+import { useCekmece } from '../state/CekmeceContext';
 import { PrimaryButton, SecondaryButton, MicButton } from '../components/common';
 
 export default function MoveSheet() {
-  const { selected, moveVal, setMoveVal, closeMove, saveMove, startVoice } = useKoydum();
+  const { selected, moveVal, setMoveVal, closeMove, saveMove, startVoice } = useCekmece();
 
   return (
     <View style={styles.scrim}>

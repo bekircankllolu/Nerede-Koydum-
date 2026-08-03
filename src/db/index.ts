@@ -18,7 +18,7 @@ export type Item = {
   history: HistoryEntry[]; // newest first
 };
 
-const DB_NAME = 'koydum.db';
+const DB_NAME = 'cekmece.db';
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDb(): Promise<SQLite.SQLiteDatabase> {

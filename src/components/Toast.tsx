@@ -1,10 +1,10 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { colors, radii } from '../theme';
-import { useKoydum } from '../state/KoydumContext';
+import { useCekmece } from '../state/CekmeceContext';
 
 export default function Toast() {
-  const { toast } = useKoydum();
+  const { toast } = useCekmece();
   if (!toast) return null;
   return (
     <View style={styles.wrap} pointerEvents="none">

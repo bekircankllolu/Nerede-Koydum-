@@ -2,12 +2,12 @@ import React from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
-import { useKoydum } from '../state/KoydumContext';
+import { useCekmece } from '../state/CekmeceContext';
 import { PrimaryButton, SecondaryButton } from '../components/common';
 import { PhotoIcon } from '../components/icons';
 
 export default function DetailScreen() {
-  const { detail, closeDetail, toggleFav, openMove, confirmLoc, deleteItem, flash } = useKoydum();
+  const { detail, closeDetail, toggleFav, openMove, confirmLoc, deleteItem, flash } = useCekmece();
   const d = detail();
   if (!d) return null;
 
