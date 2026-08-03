@@ -1,0 +1,56 @@
+name: EAS Submit
+
+# Bir production build'i TestFlight'a ya da App Store'a gönderir.
+# Actions sekmesinden "Run workflow" ile elle başlatılır, terminal gerekmez.
+#
+# Ön koşullar:
+# 1. EXPO_TOKEN secret'i tanımlı olmalı (bkz. eas-build.yml).
+# 2. Apple Developer Program üyeliği aktif olmalı.
+# 3. App Store Connect'te uygulama kaydı oluşturulmuş olmalı (My Apps > +).
+# 4. eas.json > submit.ios içine ascAppId eklenmiş olmalı (App Store Connect'te
+#    uygulamanın "Apple ID" alanındaki sayı).
+# 5. Gönderilecek bir production build'in EAS'te hazır olması gerekir
+#    (önce eas-build.yml'i platform=ios, profil=production ile çalıştır).
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Gönderilecek platform
+        type: choice
+        default: ios
+        options:
+          - ios
+          - android
+      profile:
+        description: eas.json içindeki submit profili
+        type: choice
+        default: production
+        options:
+          - production
+
+jobs:
+  submit:
+    name: ${{ inputs.platform }} / ${{ inputs.profile }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Repoyu çek
+        uses: actions/checkout@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: EAS kur
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Bağımlılıkları yükle
+        run: npm ci
+
+      - name: En son production build'i gönder
+        run: eas submit --non-interactive --platform ${{ inputs.platform }} --profile ${{ inputs.profile }} --latest

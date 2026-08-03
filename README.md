@@ -70,6 +70,23 @@ src/
 
 Uygulama ilk açılışta örnek 7 eşyayla gelir (pasaport, matkap, yedek anahtar…), böylece boş ekranla karşılaşmazsın. Bunları silip kendi eşyalarını ekleyebilirsin.
 
+## Yayına alma (TestFlight / App Store)
+
+Terminal gerekmeden, tamamı tarayıcıdan yapılabilir. `.github/workflows/eas-build.yml` ve `eas-submit.yml` GitHub Actions üzerinden elle tetiklenir.
+
+**Ön koşul:** Apple Developer Program üyeliği aktif olmalı (99 $/yıl, onay 24-48 saat sürebilir).
+
+1. **App Store Connect API Key üret** — `appstoreconnect.apple.com/access/integrations/api` → Team Keys → **+** → Access: Admin → Generate. `.p8` dosyasını indir (tek seferlik), Key ID ve Issuer ID'yi not al.
+2. **Anahtarı Expo'ya yükle** — `expo.dev` projesinde **Android & iOS credentials** sayfasına `.p8` + Key ID + Issuer ID'yi ekle.
+3. **Uygulama kaydı oluştur** — App Store Connect → My Apps → **+** → New App. Bundle ID `com.depo.app`, isim `Depo` (ya da mağazada başka bir isim tercih edilecekse farklı bir görünen ad). Kayıt oluşunca sayfadaki **Apple ID** (sayısal) değerini not al.
+4. **`eas.json`'a `ascAppId` ekle** — `submit.production.ios.ascAppId` alanına 3. adımdaki sayıyı yaz, commit'le.
+5. **Production build al** — Actions → **EAS Build** → platform `ios`, profil `production`.
+6. **TestFlight'a gönder** — Actions → **EAS Submit** → platform `ios`, profil `production`. Build'i alıp App Store Connect'e yükler.
+7. **Kendi telefonunda dene** — App Store Connect → TestFlight → kendini "Internal Tester" olarak ekle. iPhone'una **TestFlight** uygulamasını kur, davet linkinden yükle. Apple incelemesi gerekmez, dakikalar içinde telefona düşer.
+8. **App Store'a göndermek istersen** — App Store Connect'te mağaza listesini doldur (açıklama, ekran görüntüleri, gizlilik politikası URL'i, fiyatlandırma, yaş sınırı), **Submit for Review** ile Apple incelemesine yolla (genelde 1-3 gün).
+
+Android tarafında eşdeğeri Google Play Console + service account JSON'ı; henüz kurulmadı.
+
 ## İzinler
 
 | İzin | Ne için |
