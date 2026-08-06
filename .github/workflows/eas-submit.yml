@@ -11,6 +11,9 @@ name: EAS Submit
 #    uygulamanın "Apple ID" alanındaki sayı).
 # 5. Gönderilecek bir production build'in EAS'te hazır olması gerekir
 #    (önce eas-build.yml'i platform=ios, profil=production ile çalıştır).
+# 6. ASC_API_KEY_P8_BASE64 secret'i tanımlı olmalı (App Store Connect API
+#    Key'in .p8 dosyası, base64). Key ID ve Issuer ID eas.json içinde
+#    (submit.production.ios) düz metin olarak duruyor — hassas değiller.
 
 on:
   workflow_dispatch:
@@ -51,6 +54,12 @@ jobs:
 
       - name: Bağımlılıkları yükle
         run: npm ci
+
+      - name: App Store Connect API Key'i hazırla
+        if: inputs.platform == 'ios'
+        run: |
+          mkdir -p credentials
+          echo "${{ secrets.ASC_API_KEY_P8_BASE64 }}" | base64 -d > credentials/asc-api-key.p8
 
       - name: En son production build'i gönder
         run: eas submit --non-interactive --platform ${{ inputs.platform }} --profile ${{ inputs.profile }} --latest

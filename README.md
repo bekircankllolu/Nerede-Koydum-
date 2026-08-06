@@ -76,14 +76,21 @@ Terminal gerekmeden, tamamı tarayıcıdan yapılabilir. `.github/workflows/eas-
 
 **Ön koşul:** Apple Developer Program üyeliği aktif olmalı (99 $/yıl, onay 24-48 saat sürebilir).
 
+Kimlik bilgileri EAS dashboard'unda değil, **GitHub Secrets + `credentials.json`** üzerinden CI'a veriliyor (`eas.json` içinde `credentialsSource: "local"`). Dashboard'daki sihirbaz tekrarlayan sunucu hatası verdiği için bu yola geçildi; private key hiçbir zaman repoya girmiyor, yalnızca CI çalışırken geçici olarak diskte oluşuyor.
+
 1. **App Store Connect API Key üret** — `appstoreconnect.apple.com/access/integrations/api` → Team Keys → **+** → Access: Admin → Generate. `.p8` dosyasını indir (tek seferlik), Key ID ve Issuer ID'yi not al.
-2. **Anahtarı Expo'ya yükle** — `expo.dev` projesinde **Android & iOS credentials** sayfasına `.p8` + Key ID + Issuer ID'yi ekle.
-3. **Uygulama kaydı oluştur** — App Store Connect → My Apps → **+** → New App. Bundle ID `com.bekircankulluoglu.depo`, isim `Depo` (ya da mağazada başka bir isim tercih edilecekse farklı bir görünen ad — bundle ID görünen adı etkilemez). Kayıt oluşunca sayfadaki **Apple ID** (sayısal) değerini not al.
-4. **`eas.json`'a `ascAppId` ekle** — `submit.production.ios.ascAppId` alanına 3. adımdaki sayıyı yaz, commit'le.
-5. **Production build al** — Actions → **EAS Build** → platform `ios`, profil `production`.
-6. **TestFlight'a gönder** — Actions → **EAS Submit** → platform `ios`, profil `production`. Build'i alıp App Store Connect'e yükler.
-7. **Kendi telefonunda dene** — App Store Connect → TestFlight → kendini "Internal Tester" olarak ekle. iPhone'una **TestFlight** uygulamasını kur, davet linkinden yükle. Apple incelemesi gerekmez, dakikalar içinde telefona düşer.
-8. **App Store'a göndermek istersen** — App Store Connect'te mağaza listesini doldur (açıklama, ekran görüntüleri, gizlilik politikası URL'i, fiyatlandırma, yaş sınırı), **Submit for Review** ile Apple incelemesine yolla (genelde 1-3 gün).
+2. **Dağıtım sertifikası ve provisioning profile oluştur** — `developer.apple.com/account/resources/certificates` üzerinden bir "Apple Distribution" sertifikası (CSR gerekir — Mac yoksa `openssl req -new -newkey rsa:2048 -nodes` ile üretilebilir), ardından `resources/identifiers` üzerinden `com.bekircankulluoglu.depo` App ID kaydı, sonra `resources/profiles` üzerinden **App Store Connect** tipinde bir provisioning profile. Sertifikayı `.p12`'ye çevirmek için: `openssl pkcs12 -export -inkey <key> -in <cer> -out distribution.p12`.
+3. **Dosyaları base64'e çevir ve GitHub Secrets'a ekle** — repo → Settings → Secrets and variables → Actions → New repository secret:
+   - `IOS_DIST_CERT_P12_BASE64` — `.p12` dosyasının `base64 -w0` çıktısı
+   - `IOS_DIST_CERT_PASSWORD` — o `.p12`'nin parolası
+   - `IOS_PROVISIONING_PROFILE_BASE64` — `.mobileprovision` dosyasının `base64 -w0` çıktısı
+   - `ASC_API_KEY_P8_BASE64` — 1. adımdaki `.p8` dosyasının `base64 -w0` çıktısı
+4. **Uygulama kaydı oluştur** — App Store Connect → My Apps → **+** → New App. Bundle ID `com.bekircankulluoglu.depo`, isim `Depo`. Kayıt oluşunca sayfadaki **Apple ID** (sayısal) değerini not al.
+5. **`eas.json`'a `ascAppId` ekle** — `submit.production.ios.ascAppId` alanına 4. adımdaki sayıyı yaz, commit'le. (`ascApiKeyId` / `ascApiKeyIssuerId` zaten dolu.)
+6. **Production build al** — Actions → **EAS Build** → platform `ios`, profil `production`.
+7. **TestFlight'a gönder** — Actions → **EAS Submit** → platform `ios`, profil `production`. Build'i alıp App Store Connect'e yükler.
+8. **Kendi telefonunda dene** — App Store Connect → TestFlight → kendini "Internal Tester" olarak ekle. iPhone'una **TestFlight** uygulamasını kur, davet linkinden yükle. Apple incelemesi gerekmez, dakikalar içinde telefona düşer.
+9. **App Store'a göndermek istersen** — App Store Connect'te mağaza listesini doldur (açıklama, ekran görüntüleri, gizlilik politikası URL'i, fiyatlandırma, yaş sınırı), **Submit for Review** ile Apple incelemesine yolla (genelde 1-3 gün).
 
 Android tarafında eşdeğeri Google Play Console + service account JSON'ı; henüz kurulmadı.
 

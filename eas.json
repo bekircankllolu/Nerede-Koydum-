@@ -25,6 +25,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "ios": {
+        "credentialsSource": "local"
+      },
       "android": {
         "buildType": "app-bundle"
       }
@@ -33,7 +36,10 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APPLE_ID"
+        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APPLE_ID",
+        "ascApiKeyPath": "credentials/asc-api-key.p8",
+        "ascApiKeyIssuerId": "439eb0f4-c0cd-48a6-b052-9747790e95ef",
+        "ascApiKeyId": "PVF3NQX44M"
       }
     }
   }

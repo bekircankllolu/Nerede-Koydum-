@@ -7,6 +7,13 @@ name: EAS Build
 # Token'ı expo.dev > Account settings > Access tokens sayfasından üretip
 # Settings > Secrets and variables > Actions > New repository secret
 # yolundan EXPO_TOKEN adıyla eklemelisin.
+#
+# iOS production build'i için ayrıca şu secret'lar gerekiyor (EAS
+# dashboard'ının kimlik bilgisi sihirbazı sürekli sunucu hatası verdiği
+# için credentials.json ile "local credentials" yoluna geçildi):
+#   IOS_DIST_CERT_P12_BASE64      dağıtım sertifikası (.p12), base64
+#   IOS_DIST_CERT_PASSWORD        o sertifikanın parolası
+#   IOS_PROVISIONING_PROFILE_BASE64  .mobileprovision dosyası, base64
 
 on:
   workflow_dispatch:
@@ -51,6 +58,24 @@ jobs:
 
       - name: Bağımlılıkları yükle
         run: npm ci
+
+      - name: iOS kimlik bilgilerini hazırla
+        if: (inputs.platform == 'ios' || inputs.platform == 'all') && inputs.profile == 'production'
+        run: |
+          mkdir -p credentials
+          echo "${{ secrets.IOS_DIST_CERT_P12_BASE64 }}" | base64 -d > credentials/distribution.p12
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 -d > credentials/profile.mobileprovision
+          cat > credentials.json << 'JSON'
+          {
+            "ios": {
+              "provisioningProfilePath": "credentials/profile.mobileprovision",
+              "distributionCertificate": {
+                "path": "credentials/distribution.p12",
+                "password": "${{ secrets.IOS_DIST_CERT_PASSWORD }}"
+              }
+            }
+          }
+          JSON
 
       - name: Derle
         run: eas build --non-interactive --no-wait --platform ${{ inputs.platform }} --profile ${{ inputs.profile }}
