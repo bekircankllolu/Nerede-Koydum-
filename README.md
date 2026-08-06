@@ -78,7 +78,7 @@ Terminal gerekmeden, tamamı tarayıcıdan yapılabilir. `.github/workflows/eas-
 
 1. **App Store Connect API Key üret** — `appstoreconnect.apple.com/access/integrations/api` → Team Keys → **+** → Access: Admin → Generate. `.p8` dosyasını indir (tek seferlik), Key ID ve Issuer ID'yi not al.
 2. **Anahtarı Expo'ya yükle** — `expo.dev` projesinde **Android & iOS credentials** sayfasına `.p8` + Key ID + Issuer ID'yi ekle.
-3. **Uygulama kaydı oluştur** — App Store Connect → My Apps → **+** → New App. Bundle ID `com.depo.app`, isim `Depo` (ya da mağazada başka bir isim tercih edilecekse farklı bir görünen ad). Kayıt oluşunca sayfadaki **Apple ID** (sayısal) değerini not al.
+3. **Uygulama kaydı oluştur** — App Store Connect → My Apps → **+** → New App. Bundle ID `com.bekircankulluoglu.depo`, isim `Depo` (ya da mağazada başka bir isim tercih edilecekse farklı bir görünen ad — bundle ID görünen adı etkilemez). Kayıt oluşunca sayfadaki **Apple ID** (sayısal) değerini not al.
 4. **`eas.json`'a `ascAppId` ekle** — `submit.production.ios.ascAppId` alanına 3. adımdaki sayıyı yaz, commit'le.
 5. **Production build al** — Actions → **EAS Build** → platform `ios`, profil `production`.
 6. **TestFlight'a gönder** — Actions → **EAS Submit** → platform `ios`, profil `production`. Build'i alıp App Store Connect'e yükler.
