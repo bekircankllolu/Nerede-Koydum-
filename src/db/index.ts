@@ -221,3 +221,11 @@ export async function deleteItemDb(id: string): Promise<void> {
     await db.runAsync('DELETE FROM items WHERE id = ?', id);
   });
 }
+
+export async function deleteAllItems(): Promise<void> {
+  const db = await getDb();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM item_history');
+    await db.runAsync('DELETE FROM items');
+  });
+}

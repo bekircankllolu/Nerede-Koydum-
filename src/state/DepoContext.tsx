@@ -1,9 +1,12 @@
 import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import * as db from '../db';
 import type { Item } from '../db';
 import { search, daysBetween, formatAgo, initialOf, shortLoc, fullLoc, splitLoc, titleCaseFirst } from '../lib/search';
+import { itemsToCsv } from '../lib/csv';
 import { useVoiceRecognition } from '../lib/voice';
 import { colors, FREE_ITEM_LIMIT } from '../theme';
 
@@ -53,6 +56,8 @@ export function useDepoStore() {
 
   const [voiceTarget, setVoiceTarget] = useState<VoiceTarget>(null);
   const [paywall, setPaywall] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -91,6 +96,8 @@ export function useDepoStore() {
     setMoveVal('');
     setSelId(null);
     setPaywall(false);
+    setPrivacyOpen(false);
+    setHelpOpen(false);
     setVoiceTarget(null);
     if (patch.screen !== undefined) setScreen(patch.screen);
     if (patch.q !== undefined) setQ(patch.q);
@@ -281,6 +288,43 @@ export function useDepoStore() {
     flash('Satın alma geri yüklendi.', 'Depo Pro yeniden etkin.');
   }
 
+  function openPrivacy() {
+    setPrivacyOpen(true);
+  }
+  function closePrivacy() {
+    setPrivacyOpen(false);
+  }
+  function openHelp() {
+    setHelpOpen(true);
+  }
+  function closeHelp() {
+    setHelpOpen(false);
+  }
+
+  async function deleteAllData() {
+    await db.deleteAllItems();
+    setItems([]);
+    setSelId(null);
+    flash('Bütün veriler silindi.', 'Eşya kayıtları cihazdan kaldırıldı.');
+  }
+
+  async function exportCsv() {
+    if (!isPro) {
+      setPaywall(true);
+      return;
+    }
+    const csv = itemsToCsv(items);
+    const file = new File(Paths.cache, `depo-esyalar-${Date.now()}.csv`);
+    file.create({ overwrite: true });
+    file.write(csv);
+    const available = await Sharing.isAvailableAsync();
+    if (!available) {
+      flash('Paylaşım kullanılamıyor.', 'Bu cihazda dosya paylaşımı desteklenmiyor.');
+      return;
+    }
+    await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Eşyaları dışa aktar' });
+  }
+
   const listed = useMemo(() => {
     const filtered = items.filter((it) => {
       if (filter === 'fav') return it.fav;
@@ -393,6 +437,15 @@ export function useDepoStore() {
     closePaywall,
     buyPro,
     restorePro,
+
+    privacyOpen,
+    openPrivacy,
+    closePrivacy,
+    helpOpen,
+    openHelp,
+    closeHelp,
+    deleteAllData,
+    exportCsv,
 
     toast,
     flash,
