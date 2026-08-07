@@ -1,19 +1,40 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors, radii } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { ChevronRight } from '../components/icons';
 
 export default function SettingsScreen() {
-  const { isPro, openPaywall } = useDepo();
+  const { isPro, openPaywall, openPrivacy, openHelp, exportCsv, deleteAllData, items } = useDepo();
 
-  const rows: { label: string; value: string; danger?: boolean }[] = [
-    { label: 'Verileri dışa aktar', value: isPro ? 'CSV' : 'Pro' },
+  const onDeleteAll = () => {
+    if (items.length === 0) {
+      Alert.alert('Silinecek kayıt yok.', 'Henüz kayıtlı eşyan bulunmuyor.');
+      return;
+    }
+    Alert.alert(
+      'Bütün verileri silmek istediğine emin misin?',
+      `${items.length} eşya kalıcı olarak silinecek. Bu işlem geri alınamaz.`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        { text: 'Hepsini sil', style: 'destructive', onPress: deleteAllData },
+      ]
+    );
+  };
+
+  const rows: {
+    label: string;
+    value: string;
+    onPress?: () => void;
+    danger?: boolean;
+  }[] = [
+    { label: 'Verileri dışa aktar', value: isPro ? 'CSV' : 'Pro', onPress: exportCsv },
     { label: 'Dil', value: 'Türkçe' },
-    { label: 'Gizlilik', value: '' },
-    { label: 'Satın almayı geri yükle', value: '' },
-    { label: 'Yardım', value: '' },
+    { label: 'Gizlilik', value: '', onPress: openPrivacy },
+    { label: 'Satın almayı geri yükle', value: '', onPress: openPaywall },
+    { label: 'Yardım', value: '', onPress: openHelp },
     { label: 'Hakkında', value: '1.0' },
-    { label: 'Bütün verileri sil', value: '', danger: true },
+    { label: 'Bütün verileri sil', value: '', onPress: onDeleteAll, danger: true },
   ];
 
   return (
@@ -28,12 +49,40 @@ export default function SettingsScreen() {
       </Pressable>
 
       <View style={styles.rowsCard}>
-        {rows.map((r, i) => (
-          <View key={r.label} style={[styles.row, i === rows.length - 1 && { borderBottomWidth: 0 }]}>
-            <Text style={[styles.rowLabel, r.danger && { color: colors.danger }]}>{r.label}</Text>
-            <Text style={styles.rowValue}>{r.value}</Text>
-          </View>
-        ))}
+        {rows.map((r, i) => {
+          const isLast = i === rows.length - 1;
+          const content = (
+            <>
+              <Text style={[styles.rowLabel, r.danger && { color: colors.danger }]}>{r.label}</Text>
+              <View style={styles.rowRight}>
+                {r.value ? <Text style={styles.rowValue}>{r.value}</Text> : null}
+                {r.onPress && !r.danger ? <ChevronRight size={15} /> : null}
+              </View>
+            </>
+          );
+
+          if (!r.onPress) {
+            return (
+              <View key={r.label} style={[styles.row, isLast && { borderBottomWidth: 0 }]}>
+                {content}
+              </View>
+            );
+          }
+
+          return (
+            <Pressable
+              key={r.label}
+              onPress={r.onPress}
+              style={({ pressed }) => [
+                styles.row,
+                isLast && { borderBottomWidth: 0 },
+                pressed && { backgroundColor: colors.hairline },
+              ]}
+            >
+              {content}
+            </Pressable>
+          );
+        })}
       </View>
 
       <View style={styles.footNote}>
@@ -60,6 +109,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
   rowLabel: { fontSize: 16, color: colors.textPrimary },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowValue: { fontSize: 14, color: colors.textTertiary },
   footNote: { marginTop: 18, padding: 16, borderRadius: radii.md, backgroundColor: colors.indigoLight, gap: 6 },
   footNoteTitle: { fontWeight: '600', fontSize: 14, color: colors.indigo },

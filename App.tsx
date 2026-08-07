@@ -16,9 +16,13 @@ import AddItemScreen from './src/screens/AddItemScreen';
 import MoveSheet from './src/screens/MoveSheet';
 import VoicePanel from './src/screens/VoicePanel';
 import PaywallScreen from './src/screens/PaywallScreen';
+import PrivacyScreen from './src/screens/PrivacyScreen';
+import HelpScreen from './src/screens/HelpScreen';
 
 function Root() {
-  const { booting, screen, showOnboarding, selected, addOpen, moveOpen, voiceTarget, paywall } = useDepo();
+  const {
+    booting, screen, showOnboarding, selected, addOpen, moveOpen, voiceTarget, paywall, privacyOpen, helpOpen,
+  } = useDepo();
 
   if (booting) {
     return (
@@ -44,6 +48,8 @@ function Root() {
       {moveOpen && <MoveSheet />}
       {voiceTarget && <VoicePanel />}
       {paywall && <PaywallScreen />}
+      {privacyOpen && <PrivacyScreen />}
+      {helpOpen && <HelpScreen />}
       {showOnboarding && <OnboardingScreen />}
 
       <Toast />
