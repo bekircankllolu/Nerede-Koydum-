@@ -227,6 +227,25 @@ export function useDepoStore() {
     flash('Kayıt silindi.', 'Fotoğrafı da cihazdan kaldırıldı.');
   }
 
+  // Row-level variants for the list swipe actions, which act on an arbitrary
+  // item rather than the one currently open in the detail screen.
+  async function toggleFavById(id: string) {
+    const it = items.find((x) => x.id === id);
+    if (!it) return;
+    await db.toggleFavorite(id, !it.fav);
+    await refreshItems();
+    flash(it.fav ? 'Favorilerden çıkarıldı.' : 'Favorilere eklendi.', it.name);
+  }
+
+  async function deleteItemById(id: string) {
+    const it = items.find((x) => x.id === id);
+    if (!it) return;
+    await db.deleteItemDb(id);
+    if (selId === id) setSelId(null);
+    await refreshItems();
+    flash('Kayıt silindi.', `${it.name} — fotoğrafı da kaldırıldı.`);
+  }
+
   function startVoice(target: Exclude<VoiceTarget, null>) {
     setVoiceTarget(target);
     voice.start();
@@ -402,6 +421,8 @@ export function useDepoStore() {
     toggleFav,
     confirmLoc,
     deleteItem,
+    toggleFavById,
+    deleteItemById,
 
     addOpen,
     addName,

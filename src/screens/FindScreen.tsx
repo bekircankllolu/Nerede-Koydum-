@@ -7,7 +7,10 @@ import ItemRow from '../components/ItemRow';
 import { CloseIcon, PlusIcon, SearchIcon } from '../components/icons';
 
 export default function FindScreen() {
-  const { q, setQ, results, card, startVoice, recent, goItems, openAdd, createFromQuery } = useDepo();
+  const {
+    q, setQ, results, card, startVoice, recent, goItems, openAdd, createFromQuery,
+    toggleFavById, deleteItemById,
+  } = useDepo();
 
   const hasQuery = q.trim().length > 0;
   const best = results.length ? results[0] : null;
@@ -96,7 +99,17 @@ export default function FindScreen() {
             {recent.map((it) => {
               const c = card(it);
               return (
-                <ItemRow key={it.id} initial={c.initial} name={c.name} subtitle={c.shortLoc} onPress={c.open} rightLabel={c.ago} />
+                <ItemRow
+                  key={it.id}
+                  initial={c.initial}
+                  name={c.name}
+                  subtitle={c.shortLoc}
+                  onPress={c.open}
+                  rightLabel={c.ago}
+                  isFav={it.fav}
+                  onToggleFav={() => toggleFavById(it.id)}
+                  onDelete={() => deleteItemById(it.id)}
+                />
               );
             })}
           </View>
@@ -108,8 +121,8 @@ export default function FindScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 100 },
-  title: { fontWeight: '700', fontSize: 30, letterSpacing: -0.7, color: colors.textPrimary, marginVertical: 10, marginBottom: 18 },
+  content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 },
+  title: { fontWeight: '700', fontSize: 30, letterSpacing: -0.7, color: colors.textPrimary, marginBottom: 18 },
   searchRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   searchBox: {
     flex: 1, height: 56, borderRadius: radii.md, backgroundColor: colors.card,
