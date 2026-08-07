@@ -1,7 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from './src/theme';
 import { DepoProvider, useDepo } from './src/state/DepoContext';
 import { Spinner } from './src/components/common';
@@ -36,12 +37,14 @@ function Root() {
     <View style={styles.app}>
       <StatusBar style={paywall ? 'light' : 'dark'} />
 
-      <View style={styles.base}>
+      {/* The tab screens draw to the top of the window, so without this the
+          status bar sits on top of each screen's title. */}
+      <SafeAreaView style={styles.base} edges={['top']}>
         {screen === 'find' && <FindScreen />}
         {screen === 'items' && <ItemsScreen />}
         {screen === 'settings' && <SettingsScreen />}
         <TabBar />
-      </View>
+      </SafeAreaView>
 
       {selected && <DetailScreen />}
       {addOpen && <AddItemScreen />}
@@ -59,15 +62,18 @@ function Root() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <DepoProvider>
-        <Root />
-      </DepoProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.flex}>
+      <SafeAreaProvider>
+        <DepoProvider>
+          <Root />
+        </DepoProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   app: { flex: 1, backgroundColor: colors.appBg },
   base: { flex: 1 },
   bootWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.appBg },

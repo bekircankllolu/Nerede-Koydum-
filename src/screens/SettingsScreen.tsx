@@ -95,7 +95,7 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 100 },
+  content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 },
   title: { fontWeight: '700', fontSize: 30, letterSpacing: -0.7, color: colors.textPrimary, marginBottom: 20 },
   proCard: { borderRadius: radii.lg, backgroundColor: colors.paywallBg, padding: 20, gap: 6 },
   proTitle: { fontWeight: '600', fontSize: 17, color: '#fff' },
