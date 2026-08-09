@@ -14,7 +14,8 @@ import { DEFAULT_ITEM_COLOR, type ItemColorKey } from '../lib/colors';
 
 export type FilterKey = 'all' | 'recent' | 'fav' | 'nophoto' | 'loc';
 export type VoiceTarget = 'search' | 'name' | 'loc' | 'move' | null;
-export type Toast = { title: string; body: string } | null;
+export type ToastAction = { label: string; onPress: () => void };
+export type Toast = { title: string; body: string; action?: ToastAction } | null;
 export type Screen = 'find' | 'items' | 'lost' | 'settings';
 export type FormMode = 'create' | 'edit' | 'lost-create';
 
@@ -83,6 +84,8 @@ export function useDepoStore() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDeleteRef = useRef<Item | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const voice = useVoiceRecognition();
 
@@ -101,10 +104,10 @@ export function useDepoStore() {
     })();
   }, []);
 
-  const flash = useCallback((title: string, body: string) => {
+  const flash = useCallback((title: string, body: string, action?: ToastAction) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ title, body });
-    toastTimer.current = setTimeout(() => setToast(null), 2600);
+    setToast({ title, body, action });
+    toastTimer.current = setTimeout(() => setToast(null), action ? 4500 : 2600);
   }, []);
 
   // Mirrors the design's nav(): switching screens/targets always collapses
@@ -335,6 +338,48 @@ export function useDepoStore() {
     if (selId === id) setSelId(null);
     await refreshItems();
     flash('Kayıt silindi.', `${it.name} — fotoğrafı da kaldırıldı.`);
+  }
+
+  // Full-swipe delete: no confirmation Alert (the full swipe itself is the
+  // deliberate gesture) — instead it's optimistic + undoable. The row
+  // disappears immediately; the DB row is only actually deleted once the
+  // undo window lapses without the user tapping "Geri Al".
+  function deleteItemByIdWithUndo(id: string) {
+    const it = items.find((x) => x.id === id);
+    if (!it) return;
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+      pendingDeleteRef.current = null;
+    }
+    setItems((prev) => prev.filter((x) => x.id !== id));
+    if (selId === id) setSelId(null);
+    pendingDeleteRef.current = it;
+    undoTimerRef.current = setTimeout(() => {
+      const snap = pendingDeleteRef.current;
+      pendingDeleteRef.current = null;
+      undoTimerRef.current = null;
+      if (snap && snap.id === id) {
+        db.deleteItemDb(id).catch(() => {});
+      }
+    }, 4500);
+    flash('Kayıt silindi.', `${it.name}`, {
+      label: 'Geri Al',
+      onPress: () => undoDelete(id),
+    });
+  }
+
+  function undoDelete(id: string) {
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+    const snap = pendingDeleteRef.current;
+    pendingDeleteRef.current = null;
+    if (!snap || snap.id !== id) return;
+    setItems((prev) => [snap, ...prev].sort((a, b) => b.updatedAt - a.updatedAt));
+    lightHaptic();
+    setToast(null);
   }
 
   async function markLost() {
@@ -575,6 +620,7 @@ export function useDepoStore() {
     deleteItem,
     toggleFavById,
     deleteItemById,
+    deleteItemByIdWithUndo,
     markLost,
 
     foundSheetOpen,

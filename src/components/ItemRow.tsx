@@ -1,14 +1,14 @@
-import React, { useRef } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import React, { useRef, useState } from 'react';
+import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  PanGestureHandler, State,
+  type PanGestureHandlerGestureEvent, type PanGestureHandlerStateChangeEvent,
+} from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { colors, radii } from '../theme';
 import { itemColor, type ItemColorKey } from '../lib/colors';
 import { ChevronRight, StarIcon, TrashIcon } from './icons';
 import StatusBadge from './StatusBadge';
-
-// Only one row's swipe actions may be open at a time.
-const openSwipeRef: { current: Swipeable | null } = { current: null };
 
 type Props = {
   initial: string;
@@ -21,27 +21,142 @@ type Props = {
   showChevron?: boolean;
   colorKey?: ItemColorKey;
   lost?: boolean;
-  /** Swipe actions are enabled only when these are provided. */
+  /** Swipe actions are enabled only when at least one of these is provided. */
   isFav?: boolean;
   onToggleFav?: () => void;
-  onDelete?: () => void;
+  /** Normal swipe + tap on the pill: shows the existing confirm Alert. */
+  onDeleteConfirm?: () => void;
+  /** Full swipe past the commit threshold: immediate + undoable, no Alert. */
+  onFullSwipeDelete?: () => void;
 };
 
 const ACTION_WIDTH = 64;
 const ACTION_GAP = 8;
+const OPEN_WIDTH = ACTION_WIDTH + ACTION_GAP;
+const OPEN_THRESHOLD = 68;
+const FULL_SWIPE_RATIO = 0.5;
+const MAX_OPEN_RATIO = 0.72;
+const DEFAULT_ROW_WIDTH = 320;
+
+// Only one row's swipe may be open at a time, tracked by a stable per-row
+// identity token so a row never mistakes its own re-render for "another row".
+const openRow: { current: { id: object; close: () => void } | null } = { current: null };
 
 export default function ItemRow({
   initial, name, subtitle, onPress, avatarSize = 48, favMark, rightLabel, showChevron,
-  colorKey = 'indigo', lost, isFav, onToggleFav, onDelete,
+  colorKey = 'indigo', lost, isFav, onToggleFav, onDeleteConfirm, onFullSwipeDelete,
 }: Props) {
-  const swipeRef = useRef<Swipeable>(null);
-  const swipeEnabled = !!(onToggleFav || onDelete);
+  const swipeEnabled = !!(onToggleFav || onDeleteConfirm || onFullSwipeDelete);
+  const canDelete = !!(onDeleteConfirm || onFullSwipeDelete);
   const color = itemColor(colorKey);
 
-  const close = () => swipeRef.current?.close();
+  const rowId = useRef({}).current;
+  const x = useRef(new Animated.Value(0)).current;
+  const restRef = useRef(0);
+  const armedRef = useRef(false);
+  const [rowWidth, setRowWidth] = useState(DEFAULT_ROW_WIDTH);
+
+  const maxOpen = Math.max(OPEN_WIDTH + 20, rowWidth * MAX_OPEN_RATIO);
+  const fullThreshold = Math.max(OPEN_WIDTH + 40, rowWidth * FULL_SWIPE_RATIO);
+
+  function settleTo(target: number) {
+    restRef.current = target;
+    Animated.spring(x, { toValue: target, useNativeDriver: false, friction: 9, tension: 80 }).start();
+    if (target === 0) {
+      if (openRow.current && openRow.current.id === rowId) openRow.current = null;
+    } else {
+      openRow.current = { id: rowId, close: () => settleTo(0) };
+    }
+  }
+
+  const handleGestureEvent = (event: PanGestureHandlerGestureEvent) => {
+    const { translationX } = event.nativeEvent;
+    const next = Math.max(-maxOpen, Math.min(maxOpen, restRef.current + translationX));
+    x.setValue(next);
+
+    const isArmed = (next <= -fullThreshold && !!onToggleFav) || (next >= fullThreshold && canDelete);
+    if (isArmed && !armedRef.current) {
+      armedRef.current = true;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    } else if (!isArmed && armedRef.current) {
+      armedRef.current = false;
+    }
+  };
+
+  const handleStateChange = (event: PanGestureHandlerStateChangeEvent) => {
+    const { state, translationX } = event.nativeEvent;
+    if (state === State.BEGAN) {
+      x.stopAnimation();
+      if (openRow.current && openRow.current.id !== rowId) {
+        openRow.current.close();
+      }
+      return;
+    }
+    if (state === State.END || state === State.CANCELLED || state === State.FAILED) {
+      const finalValue = Math.max(-maxOpen, Math.min(maxOpen, restRef.current + translationX));
+      const wasArmed = armedRef.current;
+      armedRef.current = false;
+
+      if (wasArmed && finalValue <= -fullThreshold && onToggleFav) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        onToggleFav();
+        settleTo(0);
+        return;
+      }
+      if (wasArmed && finalValue >= fullThreshold && canDelete) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+        settleTo(0);
+        if (onFullSwipeDelete) onFullSwipeDelete();
+        else onDeleteConfirm?.();
+        return;
+      }
+      const target = finalValue <= -OPEN_THRESHOLD && onToggleFav
+        ? -OPEN_WIDTH
+        : finalValue >= OPEN_THRESHOLD && canDelete
+          ? OPEN_WIDTH
+          : 0;
+      settleTo(target);
+    }
+  };
+
+  const onCardPress = () => {
+    if (restRef.current !== 0) {
+      settleTo(0);
+      return;
+    }
+    onPress();
+  };
+
+  const handleFavTap = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    settleTo(0);
+    onToggleFav?.();
+  };
+
+  const handleDeleteTap = () => {
+    Alert.alert(
+      'Bu kaydı silmek istediğine emin misin?',
+      `${name} kalıcı olarak silinecek.`,
+      [
+        { text: 'Vazgeç', style: 'cancel', onPress: () => settleTo(0) },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+            settleTo(0);
+            onDeleteConfirm?.();
+          },
+        },
+      ]
+    );
+  };
 
   const body = (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+    <Pressable
+      onPress={swipeEnabled ? onCardPress : onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+    >
       <View
         style={[
           styles.avatar,
@@ -67,80 +182,102 @@ export default function ItemRow({
     return body;
   }
 
-  const handleFavPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    close();
-    onToggleFav?.();
-  };
+  const cardWidth = x.interpolate({
+    inputRange: [-maxOpen, 0, maxOpen],
+    outputRange: [rowWidth - maxOpen, rowWidth, rowWidth - maxOpen],
+    extrapolate: 'clamp',
+  });
+  const cardTranslateX = x.interpolate({
+    inputRange: [-maxOpen, 0, maxOpen],
+    outputRange: [0, 0, maxOpen],
+    extrapolate: 'clamp',
+  });
 
-  const handleDeletePress = () => {
-    Alert.alert(
-      'Bu kaydı silmek istediğine emin misin?',
-      `${name} kalıcı olarak silinecek.`,
-      [
-        { text: 'Vazgeç', style: 'cancel', onPress: close },
-        {
-          text: 'Sil',
-          style: 'destructive',
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-            close();
-            onDelete?.();
-          },
-        },
-      ]
-    );
-  };
-
-  const renderFavAction = () => (
-    <View style={[styles.actionSlot, styles.actionSlotRight]}>
-      <Pressable
-        onPress={handleFavPress}
-        accessibilityRole="button"
-        accessibilityLabel={isFav ? 'Favorilerden çıkar' : 'Favoriye ekle'}
-        style={[styles.actionPill, { backgroundColor: colors.swipeFavorite }]}
-      >
-        <StarIcon size={22} color="#fff" filled={!!isFav} />
-      </Pressable>
-    </View>
-  );
-
-  const renderDeleteAction = () => (
-    <View style={[styles.actionSlot, styles.actionSlotLeft]}>
-      <Pressable
-        onPress={handleDeletePress}
-        accessibilityRole="button"
-        accessibilityLabel="Kaydı sil"
-        style={[styles.actionPill, { backgroundColor: colors.swipeDelete }]}
-      >
-        <TrashIcon size={22} color="#fff" />
-      </Pressable>
-    </View>
-  );
+  const favPillWidth = x.interpolate({
+    inputRange: [-maxOpen, -ACTION_GAP],
+    outputRange: [maxOpen - ACTION_GAP, 0],
+    extrapolate: 'clamp',
+  });
+  const delPillWidth = x.interpolate({
+    inputRange: [ACTION_GAP, maxOpen],
+    outputRange: [0, maxOpen - ACTION_GAP],
+    extrapolate: 'clamp',
+  });
+  const favIconOpacity = x.interpolate({
+    inputRange: [-ACTION_WIDTH, -ACTION_WIDTH * 0.35],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+  const delIconOpacity = x.interpolate({
+    inputRange: [ACTION_WIDTH * 0.35, ACTION_WIDTH],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const favIconScale = x.interpolate({
+    inputRange: [-fullThreshold, -fullThreshold * 0.85],
+    outputRange: [1.15, 1],
+    extrapolate: 'clamp',
+  });
+  const delIconScale = x.interpolate({
+    inputRange: [fullThreshold * 0.85, fullThreshold],
+    outputRange: [1, 1.15],
+    extrapolate: 'clamp',
+  });
 
   return (
-    <Swipeable
-      ref={swipeRef}
-      friction={2}
-      leftThreshold={40}
-      rightThreshold={40}
-      overshootLeft={false}
-      overshootRight={false}
-      renderRightActions={onToggleFav ? renderFavAction : undefined}
-      renderLeftActions={onDelete ? renderDeleteAction : undefined}
-      onSwipeableWillOpen={() => {
-        if (openSwipeRef.current && openSwipeRef.current !== swipeRef.current) {
-          openSwipeRef.current.close();
-        }
-        openSwipeRef.current = swipeRef.current;
+    <View
+      style={styles.rowWrap}
+      onLayout={(e) => {
+        const w = e.nativeEvent.layout.width;
+        if (w > 0 && Math.abs(w - rowWidth) > 0.5) setRowWidth(w);
       }}
     >
-      {body}
-    </Swipeable>
+      {onToggleFav ? (
+        <Animated.View style={[styles.pillSlot, styles.pillSlotRight, { width: favPillWidth }]}>
+          <Pressable
+            onPress={handleFavTap}
+            accessibilityRole="button"
+            accessibilityLabel={isFav ? 'Favorilerden çıkar' : 'Favoriye ekle'}
+            style={[styles.actionPill, { backgroundColor: colors.swipeFavorite }]}
+          >
+            <Animated.View style={{ opacity: favIconOpacity, transform: [{ scale: favIconScale }] }}>
+              <StarIcon size={22} color="#fff" filled={!!isFav} />
+            </Animated.View>
+          </Pressable>
+        </Animated.View>
+      ) : null}
+
+      {canDelete ? (
+        <Animated.View style={[styles.pillSlot, styles.pillSlotLeft, { width: delPillWidth }]}>
+          <Pressable
+            onPress={handleDeleteTap}
+            accessibilityRole="button"
+            accessibilityLabel="Kaydı sil"
+            style={[styles.actionPill, { backgroundColor: colors.swipeDelete }]}
+          >
+            <Animated.View style={{ opacity: delIconOpacity, transform: [{ scale: delIconScale }] }}>
+              <TrashIcon size={22} color="#fff" />
+            </Animated.View>
+          </Pressable>
+        </Animated.View>
+      ) : null}
+
+      <PanGestureHandler
+        onGestureEvent={handleGestureEvent}
+        onHandlerStateChange={handleStateChange}
+        activeOffsetX={[-10, 10]}
+        failOffsetY={[-8, 8]}
+      >
+        <Animated.View style={{ width: cardWidth, transform: [{ translateX: cardTranslateX }] }}>
+          {body}
+        </Animated.View>
+      </PanGestureHandler>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rowWrap: { position: 'relative' },
   row: {
     backgroundColor: colors.card,
     borderRadius: radii.md,
@@ -167,15 +304,14 @@ const styles = StyleSheet.create({
   fav: { color: colors.favorite, fontWeight: '600', fontSize: 12 },
   subtitle: { fontSize: 13, color: colors.textSecondary },
   rightLabel: { fontSize: 11.5, color: colors.textTertiary, flexShrink: 0 },
-  // Slot reserves the swipe-travel width; the pill inside sits with an 8px
-  // gap from the card and keeps its own independent rounded corners —
-  // nothing clips it, unlike the old shared-container design.
-  actionSlot: { width: ACTION_WIDTH + ACTION_GAP, justifyContent: 'center' },
-  actionSlotRight: { alignItems: 'flex-end', paddingLeft: ACTION_GAP },
-  actionSlotLeft: { alignItems: 'flex-start', paddingRight: ACTION_GAP },
+  // Card and pills never overlap by construction — the card's own width
+  // shrinks as a pill grows, so nothing is ever translated past the row's
+  // bounds and nothing needs to be clipped.
+  pillSlot: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center' },
+  pillSlotRight: { right: 0 },
+  pillSlotLeft: { left: 0 },
   actionPill: {
-    width: ACTION_WIDTH,
-    alignSelf: 'stretch',
+    flex: 1,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',

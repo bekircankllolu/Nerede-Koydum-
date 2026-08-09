@@ -11,7 +11,7 @@ import { CloseIcon, PlusIcon, SearchIcon } from '../components/icons';
 export default function FindScreen() {
   const {
     q, setQ, results, card, startVoice, recent, goItems, openAddForm, openLostForm, createFromQuery,
-    toggleFavById, deleteItemById,
+    toggleFavById, deleteItemById, deleteItemByIdWithUndo,
   } = useDepo();
 
   const now = Date.now();
@@ -141,7 +141,8 @@ export default function FindScreen() {
                   lost={c.lost}
                   isFav={it.fav}
                   onToggleFav={() => toggleFavById(it.id)}
-                  onDelete={() => deleteItemById(it.id)}
+                  onDeleteConfirm={() => deleteItemById(it.id)}
+                  onFullSwipeDelete={() => deleteItemByIdWithUndo(it.id)}
                 />
               );
             })}
