@@ -1,10 +1,13 @@
 import * as SQLite from 'expo-sqlite';
 import { normalizeLocInput, lastSegment } from '../lib/search';
+import { DEFAULT_ITEM_COLOR, type ItemColorKey, isItemColorKey } from '../lib/colors';
 
 export type HistoryEntry = {
   where: string;
   at: number; // ms epoch
 };
+
+export type ItemStatus = 'stored' | 'lost';
 
 export type Item = {
   id: string;
@@ -13,10 +16,15 @@ export type Item = {
   note: string;
   fav: boolean;
   photoUri: string | null;
+  colorKey: ItemColorKey;
+  status: ItemStatus;
+  lostAt: number | null;
   createdAt: number;
   updatedAt: number; // last time the location was set or confirmed
   history: HistoryEntry[]; // newest first
 };
+
+export const UNKNOWN_LOCATION = 'Konum bilinmiyor';
 
 const DB_NAME = 'depo.db';
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -26,6 +34,18 @@ function getDb(): Promise<SQLite.SQLiteDatabase> {
     dbPromise = SQLite.openDatabaseAsync(DB_NAME);
   }
   return dbPromise;
+}
+
+async function ensureColumn(
+  db: SQLite.SQLiteDatabase,
+  table: string,
+  column: string,
+  ddl: string
+): Promise<void> {
+  const cols = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (!cols.some((c) => c.name === column)) {
+    await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
 }
 
 async function migrate(db: SQLite.SQLiteDatabase) {
@@ -53,6 +73,12 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       value TEXT NOT NULL
     );
   `);
+
+  // Older installs may not have these columns yet — add them without
+  // touching existing rows (they land on the DEFAULT for each column).
+  await ensureColumn(db, 'items', 'color_key', "color_key TEXT NOT NULL DEFAULT 'indigo'");
+  await ensureColumn(db, 'items', 'status', "status TEXT NOT NULL DEFAULT 'stored'");
+  await ensureColumn(db, 'items', 'lost_at', 'lost_at INTEGER');
 }
 
 // Demo data matching the design's SEED, translated into real timestamps
@@ -135,9 +161,27 @@ export async function initDb(): Promise<void> {
 
 type ItemRow = {
   id: string; name: string; loc: string; note: string; fav: number;
-  photo_uri: string | null; created_at: number; updated_at: number;
+  photo_uri: string | null; color_key: string; status: string; lost_at: number | null;
+  created_at: number; updated_at: number;
 };
 type HistoryRow = { item_id: string; where_text: string; at: number };
+
+function rowToItem(r: ItemRow, history: HistoryEntry[]): Item {
+  return {
+    id: r.id,
+    name: r.name,
+    loc: r.loc,
+    note: r.note,
+    fav: !!r.fav,
+    photoUri: r.photo_uri,
+    colorKey: isItemColorKey(r.color_key) ? r.color_key : DEFAULT_ITEM_COLOR,
+    status: r.status === 'lost' ? 'lost' : 'stored',
+    lostAt: r.lost_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    history,
+  };
+}
 
 export async function listItems(): Promise<Item[]> {
   const db = await getDb();
@@ -149,17 +193,7 @@ export async function listItems(): Promise<Item[]> {
     list.push({ where: h.where_text, at: h.at });
     historyByItem.set(h.item_id, list);
   }
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    loc: r.loc,
-    note: r.note,
-    fav: !!r.fav,
-    photoUri: r.photo_uri,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    history: historyByItem.get(r.id) || [],
-  }));
+  return rows.map((r) => rowToItem(r, historyByItem.get(r.id) || []));
 }
 
 export type NewItemInput = {
@@ -167,17 +201,20 @@ export type NewItemInput = {
   loc: string;
   note: string;
   photoUri: string | null;
+  colorKey?: ItemColorKey;
 };
 
-export async function createItem(input: NewItemInput): Promise<Item> {
+async function insertItem(input: NewItemInput & { status: ItemStatus }): Promise<Item> {
   const db = await getDb();
   const now = Date.now();
   const id = `n${now}${Math.floor(Math.random() * 1000)}`;
-  const loc = normalizeLocInput(input.loc) || input.loc.trim();
+  const loc = normalizeLocInput(input.loc) || input.loc.trim() || UNKNOWN_LOCATION;
+  const colorKey = input.colorKey || DEFAULT_ITEM_COLOR;
+  const lostAt = input.status === 'lost' ? now : null;
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      'INSERT INTO items (id, name, loc, note, fav, photo_uri, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)',
-      id, input.name.trim(), loc, input.note.trim(), input.photoUri, now, now
+      'INSERT INTO items (id, name, loc, note, fav, photo_uri, color_key, status, lost_at, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)',
+      id, input.name.trim(), loc, input.note.trim(), input.photoUri, colorKey, input.status, lostAt, now, now
     );
     await db.runAsync(
       'INSERT INTO item_history (item_id, where_text, at) VALUES (?, ?, ?)',
@@ -186,9 +223,18 @@ export async function createItem(input: NewItemInput): Promise<Item> {
   });
   return {
     id, name: input.name.trim(), loc, note: input.note.trim(), fav: false,
-    photoUri: input.photoUri, createdAt: now, updatedAt: now,
+    photoUri: input.photoUri, colorKey, status: input.status, lostAt,
+    createdAt: now, updatedAt: now,
     history: [{ where: lastSegment(loc), at: now }],
   };
+}
+
+export async function createItem(input: NewItemInput): Promise<Item> {
+  return insertItem({ ...input, status: 'stored' });
+}
+
+export async function createLostItem(input: NewItemInput): Promise<Item> {
+  return insertItem({ ...input, status: 'lost' });
 }
 
 export async function moveItem(id: string, rawLoc: string): Promise<{ loc: string; at: number }> {
@@ -212,6 +258,46 @@ export async function confirmItem(id: string): Promise<number> {
 export async function toggleFavorite(id: string, fav: boolean): Promise<void> {
   const db = await getDb();
   await db.runAsync('UPDATE items SET fav = ? WHERE id = ?', fav ? 1 : 0, id);
+}
+
+export type UpdateItemDetailsInput = {
+  name: string;
+  note: string;
+  photoUri: string | null;
+  colorKey: ItemColorKey;
+};
+
+// Pure detail edit (name/note/photo/color) — deliberately does not touch
+// loc/updated_at/history, since that timeline means "location confirmed at".
+export async function updateItemDetails(id: string, input: UpdateItemDetailsInput): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE items SET name = ?, note = ?, photo_uri = ?, color_key = ? WHERE id = ?',
+    input.name.trim(), input.note.trim(), input.photoUri, input.colorKey, id
+  );
+}
+
+export async function markItemLost(id: string): Promise<number> {
+  const db = await getDb();
+  const now = Date.now();
+  await db.runAsync('UPDATE items SET status = ?, lost_at = ?, updated_at = ? WHERE id = ?', 'lost', now, now, id);
+  return now;
+}
+
+// newLoc omitted/blank -> stays at its last-known location, just flips back to stored.
+export async function markItemFound(id: string, newLoc?: string): Promise<{ loc: string | null }> {
+  const db = await getDb();
+  const now = Date.now();
+  if (newLoc && newLoc.trim()) {
+    const loc = normalizeLocInput(newLoc) || newLoc.trim();
+    await db.withTransactionAsync(async () => {
+      await db.runAsync('UPDATE items SET loc = ?, status = ?, lost_at = NULL, updated_at = ? WHERE id = ?', loc, 'stored', now, id);
+      await db.runAsync('INSERT INTO item_history (item_id, where_text, at) VALUES (?, ?, ?)', id, lastSegment(loc), now);
+    });
+    return { loc };
+  }
+  await db.runAsync('UPDATE items SET status = ?, lost_at = NULL, updated_at = ? WHERE id = ?', 'stored', now, id);
+  return { loc: null };
 }
 
 export async function deleteItemDb(id: string): Promise<void> {

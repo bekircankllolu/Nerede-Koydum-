@@ -28,6 +28,14 @@ export const colors = {
   favorite: '#A85E18',
   danger: '#C0392B',
 
+  // Swipe action colors (spec-fixed hex values).
+  swipeFavorite: '#FF8500',
+  swipeDelete: '#FF3333',
+
+  lost: '#C0392B',
+  lostSoft: '#FBE7E4',
+  success: '#2D7A59',
+
   paywallBg: '#161616',
   paywallCheck: '#8B8CEB',
 
@@ -42,6 +50,17 @@ export const radii = {
   lg: 20,
   xl: 24,
   pill: 999,
+};
+
+// 8px-based spacing scale.
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  xxl: 24,
+  xxxl: 32,
 };
 
 export const FREE_ITEM_LIMIT = 20;

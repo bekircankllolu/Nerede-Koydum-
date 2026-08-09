@@ -2,20 +2,24 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radii } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { daysBetween } from '../lib/search';
 import { PrimaryButton, MicButton } from '../components/common';
 import ItemRow from '../components/ItemRow';
+import StatusBadge from '../components/StatusBadge';
 import { CloseIcon, PlusIcon, SearchIcon } from '../components/icons';
 
 export default function FindScreen() {
   const {
-    q, setQ, results, card, startVoice, recent, goItems, openAdd, createFromQuery,
+    q, setQ, results, card, startVoice, recent, goItems, openAddForm, openLostForm, createFromQuery,
     toggleFavById, deleteItemById,
   } = useDepo();
 
+  const now = Date.now();
   const hasQuery = q.trim().length > 0;
   const best = results.length ? results[0] : null;
   const others = results.length > 1 ? results.slice(1, 4) : [];
   const noResults = hasQuery && results.length === 0;
+  const bestLost = best?.status === 'lost';
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -44,14 +48,24 @@ export default function FindScreen() {
         <View style={{ marginTop: 22 }}>
           {best ? (
             <View style={styles.bestCard}>
-              <Text style={styles.bestLabel}>En iyi sonuç</Text>
+              <View style={styles.bestLabelRow}>
+                <Text style={styles.bestLabel}>En iyi sonuç</Text>
+                {bestLost ? <StatusBadge /> : null}
+              </View>
               <Text style={styles.bestName}>{best.name}</Text>
+              {bestLost ? <Text style={styles.bestSubLabel}>Son görüldüğü yer</Text> : null}
               <View style={{ gap: 2 }}>
-                {best.loc.split(' / ').map((line, i) => (
+                {(best.loc ? best.loc.split(' / ') : ['Konum bilinmiyor']).map((line, i) => (
                   <Text key={i} style={styles.bestLine}>{line}</Text>
                 ))}
               </View>
-              <Text style={styles.bestConfirmed}>{card(best).ago} doğrulandı.</Text>
+              {bestLost ? (
+                <Text style={styles.bestLostLine}>
+                  {best.lostAt ? `${Math.max(0, daysBetween(best.lostAt, now))} gündür kayıp` : 'Kayıp'}
+                </Text>
+              ) : (
+                <Text style={styles.bestConfirmed}>{card(best).ago} doğrulandı.</Text>
+              )}
               <PrimaryButton label="Kaydı aç" onPress={() => card(best).open()} style={{ marginTop: 2 }} />
             </View>
           ) : null}
@@ -62,7 +76,17 @@ export default function FindScreen() {
               {others.map((it) => {
                 const c = card(it);
                 return (
-                  <ItemRow key={it.id} initial={c.initial} name={c.name} subtitle={c.shortLoc} onPress={c.open} avatarSize={44} showChevron />
+                  <ItemRow
+                    key={it.id}
+                    initial={c.initial}
+                    name={c.name}
+                    subtitle={c.shortLoc}
+                    onPress={c.open}
+                    avatarSize={44}
+                    showChevron
+                    colorKey={c.colorKey}
+                    lost={c.lost}
+                  />
                 );
               })}
             </View>
@@ -73,7 +97,10 @@ export default function FindScreen() {
               <Text style={styles.noResultsTitle}>Bunu henüz kaydetmemişsin.</Text>
               <Text style={styles.noResultsBody}>Aradığın: “{q.trim()}”</Text>
               <Pressable style={styles.noResultsCta} onPress={createFromQuery}>
-                <Text style={styles.noResultsCtaText}>“{q.trim()}” kaydı oluştur</Text>
+                <Text style={styles.noResultsCtaText}>“{q.trim()}” eşya olarak kaydet</Text>
+              </Pressable>
+              <Pressable style={styles.noResultsLostCta} onPress={openLostForm}>
+                <Text style={styles.noResultsLostCtaText}>Kayıp mı? Kayıp bildir</Text>
               </Pressable>
             </View>
           ) : null}
@@ -83,11 +110,15 @@ export default function FindScreen() {
           <View style={styles.quickAdd}>
             <Text style={styles.quickAddTitle}>Bir şeyi yerine mi koydun?</Text>
             <Text style={styles.quickAddBody}>Şimdi kaydet, sonra arama.</Text>
-            <Pressable style={styles.quickAddBtn} onPress={openAdd}>
+            <Pressable style={styles.quickAddBtn} onPress={openAddForm}>
               <PlusIcon />
               <Text style={styles.quickAddBtnText}>Yeni eşya ekle</Text>
             </Pressable>
           </View>
+
+          <Pressable style={styles.lostLink} onPress={openLostForm}>
+            <Text style={styles.lostLinkText}>Bir şey mi kaybettin? Kayıp bildir</Text>
+          </Pressable>
 
           <View style={styles.recentHeader}>
             <Text style={styles.sectionLabel}>Son kayıtlar</Text>
@@ -106,6 +137,8 @@ export default function FindScreen() {
                   subtitle={c.shortLoc}
                   onPress={c.open}
                   rightLabel={c.ago}
+                  colorKey={c.colorKey}
+                  lost={c.lost}
                   isFav={it.fav}
                   onToggleFav={() => toggleFavById(it.id)}
                   onDelete={() => deleteItemById(it.id)}
@@ -134,13 +167,16 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl, backgroundColor: colors.card, padding: 22, gap: 16,
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 2 },
   },
+  bestLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bestLabel: { fontWeight: '600', fontSize: 12, color: colors.accent, letterSpacing: 0.6, textTransform: 'uppercase' },
   bestName: { fontWeight: '700', fontSize: 24, letterSpacing: -0.4, color: colors.textPrimary },
+  bestSubLabel: { fontWeight: '600', fontSize: 11.5, color: colors.textSecondary, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: -10 },
   bestLine: { fontWeight: '600', fontSize: 20, lineHeight: 27, color: colors.textPrimary },
   bestConfirmed: { fontSize: 13, color: colors.textSecondary },
+  bestLostLine: { fontSize: 13, color: colors.lost, fontWeight: '600' },
   sectionLabel: { fontWeight: '600', fontSize: 13, color: colors.textSecondary, paddingLeft: 4 },
   noResultsCard: {
-    borderRadius: radii.xl, backgroundColor: colors.card, padding: 22, paddingVertical: 26, gap: 16,
+    borderRadius: radii.xl, backgroundColor: colors.card, padding: 22, paddingVertical: 26, gap: 14,
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
   },
   noResultsTitle: { fontWeight: '600', fontSize: 19, color: colors.textPrimary },
@@ -150,6 +186,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   noResultsCtaText: { color: colors.indigo, fontWeight: '600', fontSize: 16 },
+  noResultsLostCta: { alignSelf: 'center', paddingVertical: 4 },
+  noResultsLostCtaText: { color: colors.lost, fontWeight: '500', fontSize: 13.5 },
   quickAdd: { marginTop: 20, borderRadius: radii.xl, backgroundColor: colors.indigoLight, padding: 22, gap: 6 },
   quickAddTitle: { fontWeight: '600', fontSize: 19, color: colors.textPrimary },
   quickAddBody: { fontSize: 15, color: colors.indigo },
@@ -158,6 +196,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   quickAddBtnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  recentHeader: { marginTop: 26, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 },
+  lostLink: { alignSelf: 'center', marginTop: 12, paddingVertical: 4 },
+  lostLinkText: { color: colors.textSecondary, fontWeight: '500', fontSize: 13.5 },
+  recentHeader: { marginTop: 22, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 },
   recentAll: { fontWeight: '500', fontSize: 13, color: colors.indigo },
 });

@@ -95,3 +95,59 @@ export function TabSettingsIcon({ size = 23, color = '#9A968F' }: IconProps) {
     </Svg>
   );
 }
+
+export function TabLostIcon({ size = 23, color = '#9A968F' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={8.5} stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path
+        d="M9.5 9.7a2.5 2.5 0 114.3 1.7c-.75.7-1.5 1.15-1.5 2.3"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={12.3} cy={16.9} r={1.1} fill={color} />
+    </Svg>
+  );
+}
+
+export function StarIcon({ size = 22, color = '#fff', filled = true }: IconProps & { filled?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 3.6l2.47 5.13 5.53.62-4.1 3.83 1.1 5.6L12 15.95l-4.99 2.83 1.1-5.6-4.1-3.83 5.52-.62L12 3.6z"
+        fill={filled ? color : 'none'}
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+export function TrashIcon({ size = 22, color = '#fff' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M4.5 7h15" stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Path d="M9.2 7V5.2a1 1 0 011-1h3.6a1 1 0 011 1V7" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M6.7 7l.85 12.1a2 2 0 002 1.9h4.9a2 2 0 002-1.9L17.3 7" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M10.2 10.8v6.2M13.8 10.8v6.2" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function PencilIcon({ size = 18, color = '#5556D9' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4 20l.9-4.1L15.4 5.3a1.6 1.6 0 012.3 0l1 1a1.6 1.6 0 010 2.3L8.1 19.1 4 20z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M13.5 7l3.5 3.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+    </Svg>
+  );
+}

@@ -4,10 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, SecondaryButton } from '../components/common';
-import { PhotoIcon } from '../components/icons';
+import { PhotoIcon, StarIcon } from '../components/icons';
 
 export default function DetailScreen() {
-  const { detail, closeDetail, toggleFav, openMove, confirmLoc, deleteItem, flash } = useDepo();
+  const {
+    detail, closeDetail, toggleFav, openMove, confirmLoc, deleteItem, openEditForm, markLost, openFoundSheet,
+  } = useDepo();
   const d = detail();
   if (!d) return null;
 
@@ -18,7 +20,16 @@ export default function DetailScreen() {
     ]);
   };
 
-  const stub = () => flash('Yakında', 'Bu özellik henüz eklenmedi.');
+  const onMarkLost = () => {
+    Alert.alert(
+      `${d.name}'i kayıp olarak işaretlemek istiyor musun?`,
+      'Son bilinen konumu Kayıplar bölümünde saklarız.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        { text: 'Kayıp olarak işaretle', style: 'destructive', onPress: markLost },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -26,8 +37,8 @@ export default function DetailScreen() {
         <Pressable onPress={closeDetail} hitSlop={8}>
           <Text style={styles.back}>‹ Geri</Text>
         </Pressable>
-        <Pressable onPress={toggleFav} hitSlop={8}>
-          <Text style={styles.favToggle}>{d.item.fav ? '★ Favoride' : '☆ Favoriye ekle'}</Text>
+        <Pressable onPress={openEditForm} hitSlop={8} accessibilityRole="button" accessibilityLabel="Eşyayı düzenle">
+          <Text style={styles.edit}>Düzenle</Text>
         </Pressable>
       </View>
 
@@ -41,21 +52,48 @@ export default function DetailScreen() {
           </View>
         )}
 
-        <Text style={styles.name}>{d.name}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name}>{d.name}</Text>
+          <Pressable
+            onPress={toggleFav}
+            hitSlop={10}
+            style={styles.favBtn}
+            accessibilityRole="button"
+            accessibilityLabel={d.item.fav ? 'Favorilerden çıkar' : 'Favoriye ekle'}
+          >
+            <StarIcon size={24} color={d.item.fav ? colors.favorite : colors.textTertiary} filled={d.item.fav} />
+          </Pressable>
+        </View>
 
         <View style={styles.locCard}>
-          <Text style={styles.locLabel}>Bulunduğu yer</Text>
+          <Text style={styles.locLabel}>{d.isLost ? 'Son bilinen konum' : 'Bulunduğu yer'}</Text>
           <View style={{ gap: 2 }}>
             {d.lines.map((line, i) => (
               <Text key={i} style={styles.locLine}>{line}</Text>
             ))}
           </View>
-          <Text style={styles.confirmed}>{d.confirmed}</Text>
-          <View style={styles.locActions}>
-            <PrimaryButton label="Yerini değiştir" onPress={openMove} style={{ flex: 1, height: 52 }} />
-            <SecondaryButton label="Konumu doğrula" onPress={confirmLoc} style={{ flex: 1, backgroundColor: colors.indigoLight }} />
-          </View>
+          {d.isLost ? (
+            <Text style={styles.lostLine}>{d.lostDaysLabel}</Text>
+          ) : (
+            <Text style={styles.confirmed}>{d.confirmed}</Text>
+          )}
+          {!d.isLost ? (
+            <View style={styles.locActions}>
+              <PrimaryButton label="Yerini değiştir" onPress={openMove} style={{ flex: 1, height: 52 }} />
+              <SecondaryButton label="Konumu doğrula" onPress={confirmLoc} style={{ flex: 1, backgroundColor: colors.indigoLight }} />
+            </View>
+          ) : null}
         </View>
+
+        {d.isLost ? (
+          <Pressable style={styles.foundBtn} onPress={openFoundSheet} accessibilityRole="button" accessibilityLabel="Buldum">
+            <Text style={styles.foundBtnText}>Buldum</Text>
+          </Pressable>
+        ) : (
+          <Pressable onPress={onMarkLost} style={styles.markLostBtn} accessibilityRole="button" accessibilityLabel="Kayıp olarak işaretle">
+            <Text style={styles.markLostText}>Kayıp olarak işaretle</Text>
+          </Pressable>
+        )}
 
         {d.note ? (
           <View style={styles.noteCard}>
@@ -75,12 +113,9 @@ export default function DetailScreen() {
           ))}
         </View>
 
-        <View style={styles.chipRow}>
-          <Pressable style={styles.chip} onPress={stub}><Text style={styles.chipText}>Düzenle</Text></Pressable>
-          <Pressable style={styles.chip} onPress={stub}><Text style={styles.chipText}>Paylaş</Text></Pressable>
-          <Pressable style={styles.chip} onPress={stub}><Text style={styles.chipText}>Arşivle</Text></Pressable>
-          <Pressable style={styles.chip} onPress={onDelete}><Text style={[styles.chipText, { color: colors.danger }]}>Sil</Text></Pressable>
-        </View>
+        <Pressable onPress={onDelete} style={styles.deleteBtn} accessibilityRole="button" accessibilityLabel="Kaydı sil">
+          <Text style={styles.deleteText}>Kaydı sil</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -93,7 +128,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'space-between',
   },
   back: { color: colors.indigo, fontWeight: '500', fontSize: 16 },
-  favToggle: { color: colors.indigo, fontWeight: '600', fontSize: 14 },
+  edit: { color: colors.indigo, fontWeight: '600', fontSize: 16 },
   content: { paddingHorizontal: 20, paddingBottom: 40 },
   photo: { borderRadius: radii.lg, height: 190, backgroundColor: colors.photoPlaceholderBg },
   photoPlaceholder: {
@@ -102,7 +137,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   photoPlaceholderText: { fontWeight: '500', fontSize: 12.5, color: colors.textWarm2 },
-  name: { fontWeight: '700', fontSize: 28, letterSpacing: -0.6, color: colors.textPrimary, marginVertical: 16 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 16, gap: 10 },
+  name: { flex: 1, fontWeight: '700', fontSize: 28, letterSpacing: -0.6, color: colors.textPrimary },
+  favBtn: { padding: 2 },
   locCard: {
     borderRadius: radii.xl, backgroundColor: colors.card, padding: 22, gap: 14,
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 2 },
@@ -110,7 +147,15 @@ const styles = StyleSheet.create({
   locLabel: { fontWeight: '600', fontSize: 12, color: colors.textSecondary, letterSpacing: 0.6, textTransform: 'uppercase' },
   locLine: { fontWeight: '600', fontSize: 21, lineHeight: 28, color: colors.textPrimary },
   confirmed: { fontSize: 13, color: colors.accent },
+  lostLine: { fontSize: 13, color: colors.lost, fontWeight: '600' },
   locActions: { flexDirection: 'row', gap: 10, marginTop: 2 },
+  foundBtn: {
+    marginTop: 14, height: 56, borderRadius: radii.md, backgroundColor: colors.accent,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  foundBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
+  markLostBtn: { marginTop: 14, alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 10 },
+  markLostText: { color: colors.lost, fontWeight: '500', fontSize: 14 },
   noteCard: { marginTop: 16, borderRadius: radii.md, backgroundColor: colors.card, padding: 16 },
   noteLabel: { fontWeight: '600', fontSize: 12, color: colors.textSecondary, marginBottom: 7 },
   noteText: { fontSize: 15, lineHeight: 21.75, color: colors.textPrimary },
@@ -123,10 +168,6 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 99 },
   historyWhere: { flex: 1, fontWeight: '500', fontSize: 15, color: colors.textPrimary },
   historyWhen: { fontSize: 13, color: colors.textTertiary },
-  chipRow: { marginTop: 22, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingVertical: 11, paddingHorizontal: 16, borderRadius: radii.sm, backgroundColor: colors.card,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
-  },
-  chipText: { fontWeight: '500', fontSize: 14, color: colors.textPrimary },
+  deleteBtn: { marginTop: 26, alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12 },
+  deleteText: { color: colors.danger, fontWeight: '500', fontSize: 15 },
 });

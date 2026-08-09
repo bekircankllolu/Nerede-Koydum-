@@ -10,11 +10,13 @@ import TabBar from './src/components/TabBar';
 import Toast from './src/components/Toast';
 import FindScreen from './src/screens/FindScreen';
 import ItemsScreen from './src/screens/ItemsScreen';
+import LostItemsScreen from './src/screens/LostItemsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import DetailScreen from './src/screens/DetailScreen';
-import AddItemScreen from './src/screens/AddItemScreen';
+import ItemFormScreen from './src/screens/ItemFormScreen';
 import MoveSheet from './src/screens/MoveSheet';
+import FoundSheet from './src/screens/FoundSheet';
 import VoicePanel from './src/screens/VoicePanel';
 import PaywallScreen from './src/screens/PaywallScreen';
 import PrivacyScreen from './src/screens/PrivacyScreen';
@@ -22,7 +24,8 @@ import HelpScreen from './src/screens/HelpScreen';
 
 function Root() {
   const {
-    booting, screen, showOnboarding, selected, addOpen, moveOpen, voiceTarget, paywall, privacyOpen, helpOpen,
+    booting, screen, showOnboarding, selected, formOpen, moveOpen, foundSheetOpen,
+    voiceTarget, paywall, privacyOpen, helpOpen,
   } = useDepo();
 
   if (booting) {
@@ -42,13 +45,15 @@ function Root() {
       <SafeAreaView style={styles.base} edges={['top']}>
         {screen === 'find' && <FindScreen />}
         {screen === 'items' && <ItemsScreen />}
+        {screen === 'lost' && <LostItemsScreen />}
         {screen === 'settings' && <SettingsScreen />}
         <TabBar />
       </SafeAreaView>
 
       {selected && <DetailScreen />}
-      {addOpen && <AddItemScreen />}
+      {formOpen && <ItemFormScreen />}
       {moveOpen && <MoveSheet />}
+      {foundSheetOpen && <FoundSheet />}
       {voiceTarget && <VoicePanel />}
       {paywall && <PaywallScreen />}
       {privacyOpen && <PrivacyScreen />}
