@@ -3,23 +3,27 @@ import React, {
 } from 'react';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as Haptics from 'expo-haptics';
 import * as db from '../db';
 import type { Item } from '../db';
 import { search, daysBetween, formatAgo, initialOf, shortLoc, fullLoc, splitLoc, titleCaseFirst } from '../lib/search';
 import { itemsToCsv } from '../lib/csv';
 import { useVoiceRecognition } from '../lib/voice';
 import { colors, FREE_ITEM_LIMIT } from '../theme';
+import { DEFAULT_ITEM_COLOR, type ItemColorKey } from '../lib/colors';
 
-export type FilterKey = 'all' | 'recent' | 'fav' | 'room' | 'nophoto';
+export type FilterKey = 'all' | 'recent' | 'fav' | 'nophoto' | 'loc';
 export type VoiceTarget = 'search' | 'name' | 'loc' | 'move' | null;
 export type Toast = { title: string; body: string } | null;
+export type Screen = 'find' | 'items' | 'lost' | 'settings';
+export type FormMode = 'create' | 'edit' | 'lost-create';
 
 const FILTER_DEFS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'Tümü' },
   { key: 'recent', label: 'Son eklenenler' },
   { key: 'fav', label: 'Favoriler' },
-  { key: 'room', label: 'Yatak odası' },
-  { key: 'nophoto', label: 'Fotoğrafsızlar' },
+  { key: 'nophoto', label: 'Fotoğrafsız' },
+  { key: 'loc', label: 'Konum' },
 ];
 
 const ONB_STEPS = [
@@ -32,6 +36,13 @@ function daysSince(it: Item, now: number) {
   return daysBetween(it.updatedAt, now);
 }
 
+function lightHaptic() {
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+}
+function successHaptic() {
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+}
+
 export function useDepoStore() {
   const [booting, setBooting] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
@@ -39,20 +50,32 @@ export function useDepoStore() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onbStep, setOnbStep] = useState(0);
 
-  const [screen, setScreen] = useState<'find' | 'items' | 'settings'>('find');
+  const [screen, setScreen] = useState<Screen>('find');
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [selectedLoc, setSelectedLoc] = useState<string | null>(null);
+  const [locFilterOpen, setLocFilterOpen] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [addName, setAddName] = useState('');
-  const [addLoc, setAddLoc] = useState('');
-  const [addNote, setAddNote] = useState('');
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [addPhotoUri, setAddPhotoUri] = useState<string | null>(null);
+  // Unified add / edit / lost-report form state.
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<FormMode>('create');
+  const [formEditingId, setFormEditingId] = useState<string | null>(null);
+  const [formName, setFormName] = useState('');
+  const [formLoc, setFormLoc] = useState('');
+  const [formLocUnknown, setFormLocUnknown] = useState(false);
+  const [formNote, setFormNote] = useState('');
+  const [formNoteOpen, setFormNoteOpen] = useState(false);
+  const [formPhotoUri, setFormPhotoUri] = useState<string | null>(null);
+  const [formColorKey, setFormColorKey] = useState<ItemColorKey>(DEFAULT_ITEM_COLOR);
+  const [formOriginalLoc, setFormOriginalLoc] = useState('');
+  const [formSaving, setFormSaving] = useState(false);
 
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveVal, setMoveVal] = useState('');
+
+  const [foundSheetOpen, setFoundSheetOpen] = useState(false);
+  const [foundLocVal, setFoundLocVal] = useState('');
 
   const [voiceTarget, setVoiceTarget] = useState<VoiceTarget>(null);
   const [paywall, setPaywall] = useState(false);
@@ -85,15 +108,18 @@ export function useDepoStore() {
   }, []);
 
   // Mirrors the design's nav(): switching screens/targets always collapses
-  // every overlay (add/move/detail/paywall/voice) back to a clean base state.
+  // every overlay (form/move/detail/paywall/voice/found/loc-filter) back to
+  // a clean base state.
   const nav = useCallback((patch: Partial<{
-    screen: 'find' | 'items' | 'settings'; q: string; selId: string | null;
-    addOpen: boolean; filter: FilterKey;
+    screen: Screen; q: string; selId: string | null; filter: FilterKey;
   }>) => {
     voice.reset();
-    setAddOpen(false);
+    setFormOpen(false);
     setMoveOpen(false);
     setMoveVal('');
+    setFoundSheetOpen(false);
+    setFoundLocVal('');
+    setLocFilterOpen(false);
     setSelId(null);
     setPaywall(false);
     setPrivacyOpen(false);
@@ -102,7 +128,6 @@ export function useDepoStore() {
     if (patch.screen !== undefined) setScreen(patch.screen);
     if (patch.q !== undefined) setQ(patch.q);
     if (patch.selId !== undefined) setSelId(patch.selId);
-    if (patch.addOpen !== undefined) setAddOpen(patch.addOpen);
     if (patch.filter !== undefined) setFilter(patch.filter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -115,10 +140,12 @@ export function useDepoStore() {
       id: it.id,
       name: it.name,
       initial: initialOf(it.name),
-      shortLoc: shortLoc(it.loc),
-      fullLoc: fullLoc(it.loc),
+      shortLoc: it.status === 'lost' ? (it.loc ? shortLoc(it.loc) : db.UNKNOWN_LOCATION) : shortLoc(it.loc),
+      fullLoc: it.loc ? fullLoc(it.loc) : db.UNKNOWN_LOCATION,
       favMark: it.fav ? '★' : '',
       ago: formatAgo(it.updatedAt, now),
+      colorKey: it.colorKey,
+      lost: it.status === 'lost',
       open: () => setSelId(it.id),
     };
   }
@@ -127,12 +154,15 @@ export function useDepoStore() {
 
   function detail() {
     if (!selected) return null;
+    const isLost = selected.status === 'lost';
     return {
       item: selected,
       name: selected.name,
-      lines: splitLoc(selected.loc),
+      lines: selected.loc ? splitLoc(selected.loc) : [db.UNKNOWN_LOCATION],
       note: selected.note,
       confirmed: `${formatAgo(selected.updatedAt, now)} doğrulandı.`,
+      isLost,
+      lostDaysLabel: isLost && selected.lostAt ? `${Math.max(0, daysBetween(selected.lostAt, now))} gündür kayıp` : null,
       history: selected.history.map((h, i) => ({
         where: h.where,
         when: new Date(h.at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' }),
@@ -145,45 +175,104 @@ export function useDepoStore() {
     setItems(await db.listItems());
   }
 
-  function openAdd() {
-    setAddOpen(true);
-    setAddName('');
-    setAddLoc('');
-    setAddNote('');
-    setNoteOpen(false);
-    setAddPhotoUri(null);
+  function resetForm() {
+    setFormName('');
+    setFormLoc('');
+    setFormLocUnknown(false);
+    setFormNote('');
+    setFormNoteOpen(false);
+    setFormPhotoUri(null);
+    setFormColorKey(DEFAULT_ITEM_COLOR);
+    setFormOriginalLoc('');
   }
 
-  function closeAdd() {
-    setAddOpen(false);
+  function openAddForm() {
+    resetForm();
+    setFormMode('create');
+    setFormEditingId(null);
+    setFormOpen(true);
+  }
+
+  function openEditForm() {
+    if (!selected) return;
+    setFormMode('edit');
+    setFormEditingId(selected.id);
+    setFormName(selected.name);
+    setFormLoc(selected.loc);
+    setFormOriginalLoc(selected.loc);
+    setFormLocUnknown(false);
+    setFormNote(selected.note);
+    setFormNoteOpen(!!selected.note);
+    setFormPhotoUri(selected.photoUri);
+    setFormColorKey(selected.colorKey);
+    setFormOpen(true);
+  }
+
+  function openLostForm() {
+    resetForm();
+    setFormMode('lost-create');
+    setFormEditingId(null);
+    setFormOpen(true);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
   }
 
   function createFromQuery() {
-    setAddOpen(true);
-    setAddName(titleCaseFirst(q));
-    setAddLoc('');
-    setAddNote('');
-    setNoteOpen(false);
-    setAddPhotoUri(null);
+    resetForm();
+    setFormMode('create');
+    setFormEditingId(null);
+    setFormName(titleCaseFirst(q));
+    setFormOpen(true);
   }
 
-  async function saveItem() {
-    if (!addName.trim() || !addLoc.trim()) return;
-    if (!isPro && items.length >= FREE_ITEM_LIMIT) {
-      setPaywall(true);
-      return;
+  const formValid = formName.trim().length > 0 &&
+    (formMode === 'lost-create' ? (formLocUnknown || formLoc.trim().length > 0) : formLoc.trim().length > 0);
+
+  async function saveForm() {
+    if (!formValid || formSaving) return;
+    setFormSaving(true);
+    try {
+      if (formMode === 'create') {
+        if (!isPro && items.length >= FREE_ITEM_LIMIT) {
+          setPaywall(true);
+          return;
+        }
+        const created = await db.createItem({
+          name: formName, loc: formLoc, note: formNote, photoUri: formPhotoUri, colorKey: formColorKey,
+        });
+        await refreshItems();
+        setFormOpen(false);
+        setScreen('find');
+        setQ('');
+        successHaptic();
+        flash('Kaydettim.', `${created.name} — ${created.loc}`);
+      } else if (formMode === 'lost-create') {
+        const loc = formLocUnknown ? '' : formLoc;
+        const created = await db.createLostItem({
+          name: formName, loc, note: formNote, photoUri: formPhotoUri, colorKey: formColorKey,
+        });
+        await refreshItems();
+        setFormOpen(false);
+        setScreen('lost');
+        successHaptic();
+        flash('Kayıp olarak kaydettim.', created.name);
+      } else if (formMode === 'edit' && formEditingId) {
+        const id = formEditingId;
+        await db.updateItemDetails(id, {
+          name: formName, note: formNote, photoUri: formPhotoUri, colorKey: formColorKey,
+        });
+        if (formLoc.trim() && formLoc.trim() !== formOriginalLoc.trim()) {
+          await db.moveItem(id, formLoc);
+        }
+        await refreshItems();
+        setFormOpen(false);
+        flash('Değişiklikleri kaydettim.', formName);
+      }
+    } finally {
+      setFormSaving(false);
     }
-    const created = await db.createItem({ name: addName, loc: addLoc, note: addNote, photoUri: addPhotoUri });
-    await refreshItems();
-    setAddOpen(false);
-    setAddName('');
-    setAddLoc('');
-    setAddNote('');
-    setNoteOpen(false);
-    setAddPhotoUri(null);
-    setScreen('find');
-    setQ('');
-    flash('Tamam, ben hatırlarım.', `${created.name} — ${created.loc}`);
   }
 
   function openMove() {
@@ -208,6 +297,7 @@ export function useDepoStore() {
 
   async function toggleFav() {
     if (!selected) return;
+    lightHaptic();
     await db.toggleFavorite(selected.id, !selected.fav);
     await refreshItems();
   }
@@ -216,6 +306,7 @@ export function useDepoStore() {
     if (!selId) return;
     await db.confirmItem(selId);
     await refreshItems();
+    successHaptic();
     flash('Yerini doğruladım.', 'Kayıt güncel olarak işaretlendi.');
   }
 
@@ -246,6 +337,32 @@ export function useDepoStore() {
     flash('Kayıt silindi.', `${it.name} — fotoğrafı da kaldırıldı.`);
   }
 
+  async function markLost() {
+    if (!selId) return;
+    const name = selected?.name ?? '';
+    await db.markItemLost(selId);
+    await refreshItems();
+    flash('Kayıp olarak işaretlendi.', name);
+  }
+
+  function openFoundSheet() {
+    setFoundLocVal('');
+    setFoundSheetOpen(true);
+  }
+  function closeFoundSheet() {
+    setFoundSheetOpen(false);
+    setFoundLocVal('');
+  }
+  async function markFound(useNewLoc: boolean) {
+    if (!selId) return;
+    await db.markItemFound(selId, useNewLoc ? foundLocVal : undefined);
+    await refreshItems();
+    setFoundSheetOpen(false);
+    setFoundLocVal('');
+    successHaptic();
+    flash('Buldun!', 'Yeni yerini kaydettim.');
+  }
+
   function startVoice(target: Exclude<VoiceTarget, null>) {
     setVoiceTarget(target);
     voice.start();
@@ -264,8 +381,8 @@ export function useDepoStore() {
     if (voice.stage !== 'done' || !voice.transcript) return;
     const text = voice.transcript;
     if (voiceTarget === 'search') setQ(text);
-    else if (voiceTarget === 'name') setAddName(text);
-    else if (voiceTarget === 'loc') setAddLoc(text);
+    else if (voiceTarget === 'name') setFormName(text);
+    else if (voiceTarget === 'loc') setFormLoc(text);
     else if (voiceTarget === 'move') setMoveVal(text);
     setVoiceTarget(null);
     voice.reset();
@@ -285,7 +402,7 @@ export function useDepoStore() {
     setShowOnboarding(false);
     db.setMeta('hasOnboarded', '1').catch(() => {});
     setScreen('find');
-    if (openAddAfter) openAdd();
+    if (openAddAfter) openAddForm();
   }
 
   function openPaywall() {
@@ -344,18 +461,45 @@ export function useDepoStore() {
     await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Eşyaları dışa aktar' });
   }
 
+  const storedItems = useMemo(() => items.filter((it) => it.status === 'stored'), [items]);
+  const lostItems = useMemo(
+    () => items.filter((it) => it.status === 'lost').sort((a, b) => (b.lostAt || 0) - (a.lostAt || 0)),
+    [items]
+  );
+
+  const locationOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of storedItems) {
+      const first = it.loc.split(' / ')[0]?.trim();
+      if (first) set.add(first);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [storedItems]);
+
+  function openLocFilterSheet() {
+    setLocFilterOpen(true);
+  }
+  function closeLocFilterSheet() {
+    setLocFilterOpen(false);
+  }
+  function chooseLocFilter(loc: string) {
+    setSelectedLoc(loc);
+    setFilter('loc');
+    setLocFilterOpen(false);
+  }
+
   const listed = useMemo(() => {
-    const filtered = items.filter((it) => {
+    const filtered = storedItems.filter((it) => {
       if (filter === 'fav') return it.fav;
       if (filter === 'nophoto') return !it.photoUri;
-      if (filter === 'room') return it.loc.indexOf('Yatak odası') === 0;
+      if (filter === 'loc') return selectedLoc ? it.loc.split(' / ')[0]?.trim() === selectedLoc : true;
       return true;
     });
     if (filter === 'recent') {
       return filtered.slice().sort((a, b) => daysSince(a, now) - daysSince(b, now));
     }
     return filtered;
-  }, [items, filter, now]);
+  }, [storedItems, filter, selectedLoc, now]);
 
   const recent = useMemo(
     () => items.slice().sort((a, b) => daysSince(a, now) - daysSince(b, now)).slice(0, 4),
@@ -368,7 +512,7 @@ export function useDepoStore() {
   const locSuggestions = useMemo(() => {
     const seen = new Set<string>();
     const fromItems: string[] = [];
-    for (const it of items.slice().sort((a, b) => b.updatedAt - a.updatedAt)) {
+    for (const it of storedItems.slice().sort((a, b) => b.updatedAt - a.updatedAt)) {
       if (!seen.has(it.loc)) {
         seen.add(it.loc);
         fromItems.push(it.loc);
@@ -385,7 +529,7 @@ export function useDepoStore() {
       }
     }
     return fromItems;
-  }, [items]);
+  }, [storedItems]);
 
   return {
     booting,
@@ -406,8 +550,16 @@ export function useDepoStore() {
     filter,
     setFilter,
     filterDefs: FILTER_DEFS,
+    selectedLoc,
+    locationOptions,
+    locFilterOpen,
+    openLocFilterSheet,
+    closeLocFilterSheet,
+    chooseLocFilter,
 
     items,
+    storedItems,
+    lostItems,
     listed,
     recent,
     results,
@@ -423,22 +575,39 @@ export function useDepoStore() {
     deleteItem,
     toggleFavById,
     deleteItemById,
+    markLost,
 
-    addOpen,
-    addName,
-    setAddName,
-    addLoc,
-    setAddLoc,
-    addNote,
-    setAddNote,
-    noteOpen,
-    setNoteOpen,
-    addPhotoUri,
-    setAddPhotoUri,
-    openAdd,
-    closeAdd,
+    foundSheetOpen,
+    foundLocVal,
+    setFoundLocVal,
+    openFoundSheet,
+    closeFoundSheet,
+    markFound,
+
+    formOpen,
+    formMode,
+    formName,
+    setFormName,
+    formLoc,
+    setFormLoc,
+    formLocUnknown,
+    setFormLocUnknown,
+    formNote,
+    setFormNote,
+    formNoteOpen,
+    setFormNoteOpen,
+    formPhotoUri,
+    setFormPhotoUri,
+    formColorKey,
+    setFormColorKey,
+    formValid,
+    formSaving,
+    openAddForm,
+    openEditForm,
+    openLostForm,
+    closeForm,
     createFromQuery,
-    saveItem,
+    saveForm,
 
     moveOpen,
     moveVal,

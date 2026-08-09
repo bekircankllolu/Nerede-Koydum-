@@ -4,6 +4,58 @@ import { colors, radii } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { ChevronRight } from '../components/icons';
 
+type Row = { label: string; value: string; onPress?: () => void; danger?: boolean };
+
+function RowsCard({ rows }: { rows: Row[] }) {
+  return (
+    <View style={styles.rowsCard}>
+      {rows.map((r, i) => {
+        const isLast = i === rows.length - 1;
+        const content = (
+          <>
+            <Text style={[styles.rowLabel, r.danger && { color: colors.danger }]}>{r.label}</Text>
+            <View style={styles.rowRight}>
+              {r.value ? <Text style={styles.rowValue}>{r.value}</Text> : null}
+              {r.onPress && !r.danger ? <ChevronRight size={15} /> : null}
+            </View>
+          </>
+        );
+
+        if (!r.onPress) {
+          return (
+            <View key={r.label} style={[styles.row, isLast && { borderBottomWidth: 0 }]}>
+              {content}
+            </View>
+          );
+        }
+
+        return (
+          <Pressable
+            key={r.label}
+            onPress={r.onPress}
+            style={({ pressed }) => [
+              styles.row,
+              isLast && { borderBottomWidth: 0 },
+              pressed && { backgroundColor: colors.hairline },
+            ]}
+          >
+            {content}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function Section({ label, rows }: { label?: string; rows: Row[] }) {
+  return (
+    <View style={styles.section}>
+      {label ? <Text style={styles.sectionLabel}>{label}</Text> : null}
+      <RowsCard rows={rows} />
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const { isPro, openPaywall, openPrivacy, openHelp, exportCsv, deleteAllData, items } = useDepo();
 
@@ -22,18 +74,19 @@ export default function SettingsScreen() {
     );
   };
 
-  const rows: {
-    label: string;
-    value: string;
-    onPress?: () => void;
-    danger?: boolean;
-  }[] = [
+  const dataRows: Row[] = [
     { label: 'Verileri dışa aktar', value: isPro ? 'CSV' : 'Pro', onPress: exportCsv },
+  ];
+  const appRows: Row[] = [
     { label: 'Dil', value: 'Türkçe' },
     { label: 'Gizlilik', value: '', onPress: openPrivacy },
     { label: 'Satın almayı geri yükle', value: '', onPress: openPaywall },
     { label: 'Yardım', value: '', onPress: openHelp },
-    { label: 'Hakkında', value: '1.0' },
+  ];
+  const aboutRows: Row[] = [
+    { label: 'Sürüm', value: '1.0' },
+  ];
+  const dangerRows: Row[] = [
     { label: 'Bütün verileri sil', value: '', onPress: onDeleteAll, danger: true },
   ];
 
@@ -48,42 +101,10 @@ export default function SettingsScreen() {
         </Text>
       </Pressable>
 
-      <View style={styles.rowsCard}>
-        {rows.map((r, i) => {
-          const isLast = i === rows.length - 1;
-          const content = (
-            <>
-              <Text style={[styles.rowLabel, r.danger && { color: colors.danger }]}>{r.label}</Text>
-              <View style={styles.rowRight}>
-                {r.value ? <Text style={styles.rowValue}>{r.value}</Text> : null}
-                {r.onPress && !r.danger ? <ChevronRight size={15} /> : null}
-              </View>
-            </>
-          );
-
-          if (!r.onPress) {
-            return (
-              <View key={r.label} style={[styles.row, isLast && { borderBottomWidth: 0 }]}>
-                {content}
-              </View>
-            );
-          }
-
-          return (
-            <Pressable
-              key={r.label}
-              onPress={r.onPress}
-              style={({ pressed }) => [
-                styles.row,
-                isLast && { borderBottomWidth: 0 },
-                pressed && { backgroundColor: colors.hairline },
-              ]}
-            >
-              {content}
-            </Pressable>
-          );
-        })}
-      </View>
+      <Section label="VERİLER" rows={dataRows} />
+      <Section label="UYGULAMA" rows={appRows} />
+      <Section label="HAKKINDA" rows={aboutRows} />
+      <Section rows={dangerRows} />
 
       <View style={styles.footNote}>
         <Text style={styles.footNoteTitle}>Eşyaların da bilgilerin de sende kalır.</Text>
@@ -100,8 +121,13 @@ const styles = StyleSheet.create({
   proCard: { borderRadius: radii.lg, backgroundColor: colors.paywallBg, padding: 20, gap: 6 },
   proTitle: { fontWeight: '600', fontSize: 17, color: '#fff' },
   proSub: { fontSize: 13.5, lineHeight: 18, color: 'rgba(255,255,255,0.68)' },
+  section: { marginTop: 20 },
+  sectionLabel: {
+    fontWeight: '600', fontSize: 11.5, color: colors.textTertiary, letterSpacing: 0.6,
+    marginBottom: 8, paddingLeft: 4,
+  },
   rowsCard: {
-    marginTop: 20, borderRadius: radii.md, backgroundColor: colors.card, overflow: 'hidden',
+    borderRadius: radii.md, backgroundColor: colors.card, overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
   },
   row: {

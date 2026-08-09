@@ -3,6 +3,29 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 
 import { colors, radii } from '../theme';
 import { MicIcon } from './icons';
 
+export function IconButton({
+  onPress, children, size = 44, bg = colors.card, accessibilityLabel, style,
+}: {
+  onPress: () => void; children: React.ReactNode; size?: number; bg?: string;
+  accessibilityLabel: string; style?: ViewStyle;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      hitSlop={6}
+      style={({ pressed }) => [
+        styles.iconBtn,
+        { width: size, height: size, borderRadius: size / 2, backgroundColor: bg, opacity: pressed ? 0.85 : 1 },
+        style,
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
 export function PrimaryButton({
   label, onPress, bg = colors.indigo, disabled, style, textColor = '#fff',
 }: {
@@ -74,4 +97,5 @@ const styles = StyleSheet.create({
     shadowColor: colors.indigo, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
   },
   spinnerWrap: { padding: 20, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { alignItems: 'center', justifyContent: 'center' },
 });
