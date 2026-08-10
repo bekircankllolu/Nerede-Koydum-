@@ -19,6 +19,11 @@ export type Toast = { title: string; body: string; action?: ToastAction } | null
 export type Screen = 'find' | 'items' | 'lost' | 'settings';
 export type FormMode = 'create' | 'edit' | 'lost-create';
 
+type PendingDelete = { item: Item; timer: ReturnType<typeof setTimeout> };
+
+/** How long "Geri Al" stays available before the DB row is really removed. */
+const UNDO_WINDOW_MS = 4500;
+
 const FILTER_DEFS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'Tümü' },
   { key: 'recent', label: 'Son eklenenler' },
@@ -84,8 +89,9 @@ export function useDepoStore() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingDeleteRef = useRef<Item | null>(null);
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Items removed from the UI but not yet deleted from the DB, keyed by id
+  // so several undo windows can be in flight at once.
+  const pendingDeletesRef = useRef<Map<string, PendingDelete>>(new Map());
 
   const voice = useVoiceRecognition();
 
@@ -174,8 +180,14 @@ export function useDepoStore() {
     };
   }
 
+  // Every reload goes through here, and every reload hides rows whose undo
+  // window is still open — otherwise an unrelated refresh (favouriting
+  // another item, an edit, a move) would resurrect a just-deleted row,
+  // since its DB record deliberately still exists.
   async function refreshItems() {
-    setItems(await db.listItems());
+    const loaded = await db.listItems();
+    const pending = pendingDeletesRef.current;
+    setItems(pending.size ? loaded.filter((it) => !pending.has(it.id)) : loaded);
   }
 
   function resetForm() {
@@ -346,40 +358,47 @@ export function useDepoStore() {
   // undo window lapses without the user tapping "Geri Al".
   function deleteItemByIdWithUndo(id: string) {
     const it = items.find((x) => x.id === id);
-    if (!it) return;
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current);
-      undoTimerRef.current = null;
-      pendingDeleteRef.current = null;
-    }
+    if (!it || pendingDeletesRef.current.has(id)) return;
+
+    // Each delete gets its own timer/entry, so two deletes started seconds
+    // apart can never clobber each other's pending state.
     setItems((prev) => prev.filter((x) => x.id !== id));
     if (selId === id) setSelId(null);
-    pendingDeleteRef.current = it;
-    undoTimerRef.current = setTimeout(() => {
-      const snap = pendingDeleteRef.current;
-      pendingDeleteRef.current = null;
-      undoTimerRef.current = null;
-      if (snap && snap.id === id) {
-        db.deleteItemDb(id).catch(() => {});
-      }
-    }, 4500);
-    flash('Kayıt silindi.', `${it.name}`, {
+
+    const timer = setTimeout(() => { commitPendingDelete(id); }, UNDO_WINDOW_MS);
+    pendingDeletesRef.current.set(id, { item: it, timer });
+
+    flash('Kayıt silindi.', it.name, {
       label: 'Geri Al',
       onPress: () => undoDelete(id),
     });
   }
 
-  function undoDelete(id: string) {
-    if (undoTimerRef.current) {
-      clearTimeout(undoTimerRef.current);
-      undoTimerRef.current = null;
+  // Undo window lapsed: the row really goes. A failed DB delete must not be
+  // swallowed — the item comes back so the user never silently loses data.
+  async function commitPendingDelete(id: string) {
+    const entry = pendingDeletesRef.current.get(id);
+    if (!entry) return;
+    try {
+      await db.deleteItemDb(id);
+      pendingDeletesRef.current.delete(id);
+    } catch {
+      pendingDeletesRef.current.delete(id);
+      await refreshItems();
+      flash('Kayıt silinemedi.', `${entry.item.name} geri getirildi.`);
     }
-    const snap = pendingDeleteRef.current;
-    pendingDeleteRef.current = null;
-    if (!snap || snap.id !== id) return;
-    setItems((prev) => [snap, ...prev].sort((a, b) => b.updatedAt - a.updatedAt));
+  }
+
+  // The DB row was never touched during the undo window, so restoring is a
+  // plain reload — no re-insert, hence no duplicate row and no lost history.
+  async function undoDelete(id: string) {
+    const entry = pendingDeletesRef.current.get(id);
+    if (!entry) return;
+    clearTimeout(entry.timer);
+    pendingDeletesRef.current.delete(id);
     lightHaptic();
     setToast(null);
+    await refreshItems();
   }
 
   async function markLost() {
@@ -483,6 +502,10 @@ export function useDepoStore() {
   }
 
   async function deleteAllData() {
+    // Everything is going anyway — drop the pending timers so none of them
+    // later fires against an already-empty table (or resurrects a row).
+    for (const entry of pendingDeletesRef.current.values()) clearTimeout(entry.timer);
+    pendingDeletesRef.current.clear();
     await db.deleteAllItems();
     setItems([]);
     setSelId(null);

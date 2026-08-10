@@ -1,9 +1,10 @@
-import React, { useRef, useState } from 'react';
-import { Alert, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-import {
-  PanGestureHandler, State,
-  type PanGestureHandlerGestureEvent, type PanGestureHandlerStateChangeEvent,
-} from 'react-native-gesture-handler';
+import React, { useCallback, useRef, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  cancelAnimation, interpolate, runOnJS, useAnimatedStyle, useSharedValue,
+  withSpring, withTiming, Extrapolation,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { colors, radii } from '../theme';
 import { itemColor, type ItemColorKey } from '../lib/colors';
@@ -24,31 +25,50 @@ type Props = {
   /** Swipe actions are enabled only when at least one of these is provided. */
   isFav?: boolean;
   onToggleFav?: () => void;
-  /** Normal swipe + tap on the pill: shows the existing confirm Alert. */
+  /** Normal swipe + tap on the capsule: shows the existing confirm Alert. */
   onDeleteConfirm?: () => void;
   /** Full swipe past the commit threshold: immediate + undoable, no Alert. */
   onFullSwipeDelete?: () => void;
 };
 
-// Apple Music model: the item card is a rigid, full-width layer that only
-// ever translates — it never resizes, so its content (avatar/name/location/
-// timestamp) never gets squeezed. The colored capsule lives in its own layer
-// behind the card, hugging the row's outer edge, and grows as the card
-// translates away from it.
-const CAPSULE_MAX = 64; // capsule's "resting" size once normal-open
-const ACTION_GAP = 8; // breathing room between the capsule and the card
-// Distance at which the capsule reaches CAPSULE_MAX and 1:1 finger tracking
-// gives way to resistance — the boundary between "normal swipe" and "full swipe".
-const REVEAL_DISTANCE = CAPSULE_MAX + ACTION_GAP;
-const RESISTANCE = 0.88; // damping applied to card/capsule growth beyond REVEAL_DISTANCE
-const DIRECTION_ACTIVATION_DISTANCE = 10; // dead zone before a gesture's direction locks
-const FULL_SWIPE_RATIO = 0.48; // committed-action threshold, fraction of row width
-const MAX_RAW_RATIO = 0.85; // hard cap on raw finger travel, fraction of row width
-const OPEN_SNAP_THRESHOLD = 40; // release-without-arming: snap open vs snap closed
-const DEFAULT_ROW_WIDTH = 320;
+// Apple Music model: the card is a rigid, full-width layer that only ever
+// translates — its width is never animated, so its content can't be squeezed.
+// The coloured capsule sits behind it, hugging the row's outer edge, and
+// grows as the card travels away from it.
+const CAPSULE_REST_WIDTH = 64;
+const ACTION_GAP = 8;
+const REVEAL_DISTANCE = CAPSULE_REST_WIDTH + ACTION_GAP; // 1:1 finger tracking up to here
+const RESISTANCE = 0.86; // applied to travel beyond REVEAL_DISTANCE
+const DIRECTION_ACTIVATION_DISTANCE = 12; // dead zone before a gesture picks a side
+const OPEN_SNAP_THRESHOLD = 42; // release without arming: snap open vs closed
+const FULL_SWIPE_RATIO = 0.48; // commit threshold, fraction of row width (raw distance)
+const MAX_RAW_RATIO = 0.85; // hard cap on raw finger travel
+const ARMED_ICON_SCALE = 1.1;
 
-// Only one row's swipe may be open at a time, tracked by a stable per-row
-// identity token so a row never mistakes its own re-render for "another row".
+const SPRING = { damping: 26, stiffness: 280, mass: 0.9, overshootClamping: true } as const;
+/** Capsule fold-away after a committed full-swipe delete. */
+const COLLAPSE_DURATION = 200;
+/** Height/opacity collapse, once the capsule has visibly folded away. */
+const REMOVE_DURATION = 170;
+
+// Distance mapping. Past REVEAL_DISTANCE the card resists the finger, so
+// `raw` (physical finger travel, what thresholds are judged on) and
+// `effective` (what actually gets rendered) diverge.
+function toEffective(raw: number): number {
+  'worklet';
+  const a = Math.abs(raw);
+  if (a <= REVEAL_DISTANCE) return raw;
+  return Math.sign(raw) * (REVEAL_DISTANCE + (a - REVEAL_DISTANCE) * RESISTANCE);
+}
+
+function toRaw(effective: number): number {
+  'worklet';
+  const a = Math.abs(effective);
+  if (a <= REVEAL_DISTANCE) return effective;
+  return Math.sign(effective) * (REVEAL_DISTANCE + (a - REVEAL_DISTANCE) / RESISTANCE);
+}
+
+// Only one row may sit in the resting-open state at a time.
 const openRow: { current: { id: object; close: () => void } | null } = { current: null };
 
 export default function ItemRow({
@@ -60,113 +80,195 @@ export default function ItemRow({
   const color = itemColor(colorKey);
 
   const rowId = useRef({}).current;
-  // Raw (direction-clamped) signed drag distance in px. Negative = favorite
-  // side (left swipe), positive = delete side (right swipe).
-  const x = useRef(new Animated.Value(0)).current;
-  const restRef = useRef(0);
-  const armedRef = useRef(false);
-  const directionRef = useRef<'left' | 'right' | null>(null);
-  const [rowWidth, setRowWidth] = useState(DEFAULT_ROW_WIDTH);
+  const [removing, setRemoving] = useState(false);
 
-  const maxRaw = Math.max(REVEAL_DISTANCE + 60, rowWidth * MAX_RAW_RATIO);
-  const fullThreshold = Math.max(REVEAL_DISTANCE + 30, rowWidth * FULL_SWIPE_RATIO);
-  // How far the card has actually translated at maxRaw, after resistance.
-  const maxEffective = REVEAL_DISTANCE + (maxRaw - REVEAL_DISTANCE) * RESISTANCE;
+  // All gesture state lives on the UI thread — no React state per frame.
+  const tx = useSharedValue(0); // effective translation, what the card renders at
+  const dir = useSharedValue(0); // -1 favourite, +1 delete, 0 undecided
+  const armed = useSharedValue(0);
+  const armedBoost = useSharedValue(1);
+  const startRaw = useSharedValue(0); // raw distance the current gesture began from
+  const rowW = useSharedValue(0);
+  const rowH = useSharedValue(0);
+  const removeP = useSharedValue(1); // 1 = present, 0 = collapsed away
+  const locked = useSharedValue(0); // set once an action is committing
 
-  // A gesture's direction, once locked, cannot flip sides mid-gesture — a
-  // right-swipe-in-progress can shrink back toward 0 but must never cross
-  // into favorite territory, and vice versa.
-  function clampToDirection(raw: number, dir: 'left' | 'right' | null): number {
-    let v = raw;
-    if (dir === 'left') v = Math.min(0, v);
-    else if (dir === 'right') v = Math.max(0, v);
-    return Math.max(-maxRaw, Math.min(maxRaw, v));
-  }
+  const close = useCallback(() => {
+    tx.value = withSpring(0, SPRING);
+    if (openRow.current && openRow.current.id === rowId) openRow.current = null;
+  }, [rowId, tx]);
 
-  function settleTo(target: number) {
-    restRef.current = target;
-    Animated.spring(x, {
-      toValue: target,
-      useNativeDriver: false,
-      damping: 24,
-      mass: 0.85,
-      stiffness: 260,
-      overshootClamping: true,
-    }).start();
-    if (target === 0) {
-      if (openRow.current && openRow.current.id === rowId) openRow.current = null;
-    } else {
-      openRow.current = { id: rowId, close: () => settleTo(0) };
-    }
-  }
+  const registerOpen = useCallback(() => {
+    openRow.current = { id: rowId, close };
+  }, [rowId, close]);
 
-  const handleGestureEvent = (event: PanGestureHandlerGestureEvent) => {
-    const { translationX } = event.nativeEvent;
-    const raw = restRef.current + translationX;
-    if (directionRef.current === null) {
-      if (raw <= -DIRECTION_ACTIVATION_DISTANCE && onToggleFav) directionRef.current = 'left';
-      else if (raw >= DIRECTION_ACTIVATION_DISTANCE && canDelete) directionRef.current = 'right';
-    }
-    const next = clampToDirection(raw, directionRef.current);
-    x.setValue(next);
+  const closeOthers = useCallback(() => {
+    if (openRow.current && openRow.current.id !== rowId) openRow.current.close();
+  }, [rowId]);
 
-    // Crossing the full-swipe threshold only "arms" the gesture — it must
-    // NOT run any business logic yet. That only happens at release (below).
-    const isArmed = (next <= -fullThreshold && !!onToggleFav) || (next >= fullThreshold && canDelete);
-    if (isArmed && !armedRef.current) {
-      armedRef.current = true;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    } else if (!isArmed && armedRef.current) {
-      armedRef.current = false;
-    }
-  };
+  const clearOpen = useCallback(() => {
+    if (openRow.current && openRow.current.id === rowId) openRow.current = null;
+  }, [rowId]);
 
-  const handleStateChange = (event: PanGestureHandlerStateChangeEvent) => {
-    const { state, translationX } = event.nativeEvent;
-    if (state === State.BEGAN) {
-      x.stopAnimation();
-      directionRef.current = null;
-      armedRef.current = false;
-      if (openRow.current && openRow.current.id !== rowId) {
-        openRow.current.close();
+  const hapticArm = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+  }, []);
+
+  const commitFavorite = useCallback(() => {
+    // The row stays mounted, so the collapse keeps playing while the star
+    // fills in — no perceived delay.
+    clearOpen();
+    onToggleFav?.();
+  }, [clearOpen, onToggleFav]);
+
+  const startFullDelete = useCallback(() => {
+    clearOpen();
+    setRemoving(true);
+  }, [clearOpen]);
+
+  const finishFullDelete = useCallback(() => {
+    if (onFullSwipeDelete) onFullSwipeDelete();
+    else onDeleteConfirm?.();
+  }, [onFullSwipeDelete, onDeleteConfirm]);
+
+  const pan = Gesture.Pan()
+    .enabled(swipeEnabled && !removing)
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-12, 12])
+    .onBegin(() => {
+      if (locked.value) return;
+      // Take over whatever the spring was doing at its current visible
+      // position, so an interrupted animation never jumps.
+      cancelAnimation(tx);
+      startRaw.value = toRaw(tx.value);
+      // A row that is already open stays locked to the side it's open on —
+      // dragging back toward centre closes it rather than flipping sides.
+      dir.value = tx.value < 0 ? -1 : tx.value > 0 ? 1 : 0;
+      armed.value = 0;
+      armedBoost.value = withSpring(1, SPRING);
+    })
+    .onUpdate((e) => {
+      if (locked.value) return;
+      const w = rowW.value;
+      const maxRaw = Math.max(REVEAL_DISTANCE + 60, w * MAX_RAW_RATIO);
+      const fullRaw = Math.max(REVEAL_DISTANCE + 30, w * FULL_SWIPE_RATIO);
+
+      // Direction is picked from THIS gesture's travel only, never from the
+      // resting offset, and once picked it cannot flip mid-gesture.
+      if (dir.value === 0) {
+        if (e.translationX <= -DIRECTION_ACTIVATION_DISTANCE && onToggleFav) dir.value = -1;
+        else if (e.translationX >= DIRECTION_ACTIVATION_DISTANCE && canDelete) dir.value = 1;
+        else return;
       }
-      return;
-    }
-    if (state === State.END || state === State.CANCELLED || state === State.FAILED) {
-      const raw = restRef.current + translationX;
-      const finalValue = clampToDirection(raw, directionRef.current);
-      const wasArmed = armedRef.current;
-      armedRef.current = false;
-      directionRef.current = null;
 
-      // The decision uses the value AT RELEASE, not "was it ever armed" —
-      // dragging past the threshold and back below it before lifting the
-      // finger must cancel the action.
-      if (wasArmed && finalValue <= -fullThreshold && onToggleFav) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-        onToggleFav();
-        settleTo(0);
+      let raw = startRaw.value + e.translationX;
+      raw = dir.value < 0 ? Math.min(0, raw) : Math.max(0, raw);
+      raw = Math.max(-maxRaw, Math.min(maxRaw, raw));
+      tx.value = toEffective(raw);
+
+      // Crossing the threshold only arms the gesture; nothing commits until
+      // the finger lifts.
+      const shouldArm = Math.abs(raw) >= fullRaw ? 1 : 0;
+      if (shouldArm !== armed.value) {
+        armed.value = shouldArm;
+        armedBoost.value = withSpring(shouldArm ? ARMED_ICON_SCALE : 1, SPRING);
+        if (shouldArm) runOnJS(hapticArm)(); // one haptic per transition only
+      }
+    })
+    .onEnd(() => {
+      if (locked.value) return;
+      const w = rowW.value;
+      const fullRaw = Math.max(REVEAL_DISTANCE + 30, w * FULL_SWIPE_RATIO);
+      const raw = toRaw(tx.value);
+      const wasArmed = armed.value === 1;
+      const d = dir.value;
+
+      armed.value = 0;
+      armedBoost.value = withSpring(1, SPRING);
+      dir.value = 0;
+
+      if (wasArmed && d < 0 && -raw >= fullRaw && onToggleFav) {
+        locked.value = 1;
+        tx.value = withSpring(0, SPRING, () => {
+          locked.value = 0;
+        });
+        runOnJS(commitFavorite)();
         return;
       }
-      if (wasArmed && finalValue >= fullThreshold && canDelete) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-        settleTo(0);
-        if (onFullSwipeDelete) onFullSwipeDelete();
-        else onDeleteConfirm?.();
+
+      if (wasArmed && d > 0 && raw >= fullRaw && canDelete) {
+        locked.value = 1;
+        runOnJS(startFullDelete)();
+        // Sequence: the capsule visibly folds away first, and only then does
+        // the row collapse and the item actually leave the list. A committed
+        // action uses a timed curve rather than a spring so the whole
+        // sequence stays snappy and predictable.
+        tx.value = withTiming(0, { duration: COLLAPSE_DURATION }, (finished) => {
+          if (!finished) return;
+          removeP.value = withTiming(0, { duration: REMOVE_DURATION }, (done) => {
+            if (done) runOnJS(finishFullDelete)();
+          });
+        });
         return;
       }
-      const target = finalValue <= -OPEN_SNAP_THRESHOLD && onToggleFav
+
+      const target = raw <= -OPEN_SNAP_THRESHOLD && onToggleFav
         ? -REVEAL_DISTANCE
-        : finalValue >= OPEN_SNAP_THRESHOLD && canDelete
+        : raw >= OPEN_SNAP_THRESHOLD && canDelete
           ? REVEAL_DISTANCE
           : 0;
-      settleTo(target);
-    }
-  };
+      tx.value = withSpring(target, SPRING);
+      if (target === 0) runOnJS(clearOpen)();
+      else runOnJS(registerOpen)();
+    })
+    .onTouchesDown(() => {
+      runOnJS(closeOthers)();
+    });
+
+  const cardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }],
+  }));
+
+  const wrapStyle = useAnimatedStyle(() => {
+    // maxHeight (not height) so the row keeps its natural size until the
+    // removal animation actually runs, and stays unconstrained while idle
+    // so content can never be clamped to a stale measurement.
+    const h = rowH.value > 0 ? rowH.value : 1000;
+    return {
+      maxHeight: removeP.value === 1 ? 1000 : h * removeP.value,
+      opacity: removeP.value,
+    };
+  });
+
+  const favCapsuleStyle = useAnimatedStyle(() => ({
+    width: Math.max(0, -tx.value - ACTION_GAP),
+  }));
+  const delCapsuleStyle = useAnimatedStyle(() => ({
+    width: Math.max(0, tx.value - ACTION_GAP),
+  }));
+
+  const favIconStyle = useAnimatedStyle(() => {
+    const a = -tx.value;
+    return {
+      opacity: interpolate(a, [ACTION_GAP, REVEAL_DISTANCE * 0.5], [0, 1], Extrapolation.CLAMP),
+      transform: [{
+        scale: interpolate(a, [ACTION_GAP, REVEAL_DISTANCE], [0.85, 1], Extrapolation.CLAMP) * armedBoost.value,
+      }],
+    };
+  });
+  const delIconStyle = useAnimatedStyle(() => {
+    const a = tx.value;
+    return {
+      opacity: interpolate(a, [ACTION_GAP, REVEAL_DISTANCE * 0.5], [0, 1], Extrapolation.CLAMP),
+      transform: [{
+        scale: interpolate(a, [ACTION_GAP, REVEAL_DISTANCE], [0.85, 1], Extrapolation.CLAMP) * armedBoost.value,
+      }],
+    };
+  });
 
   const onCardPress = () => {
-    if (restRef.current !== 0) {
-      settleTo(0);
+    if (tx.value !== 0) {
+      close();
       return;
     }
     onPress();
@@ -174,7 +276,7 @@ export default function ItemRow({
 
   const handleFavTap = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    settleTo(0);
+    close();
     onToggleFav?.();
   };
 
@@ -183,13 +285,13 @@ export default function ItemRow({
       'Bu kaydı silmek istediğine emin misin?',
       `${name} kalıcı olarak silinecek.`,
       [
-        { text: 'Vazgeç', style: 'cancel', onPress: () => settleTo(0) },
+        { text: 'Vazgeç', style: 'cancel', onPress: close },
         {
           text: 'Sil',
           style: 'destructive',
           onPress: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-            settleTo(0);
+            close();
             onDeleteConfirm?.();
           },
         },
@@ -227,70 +329,25 @@ export default function ItemRow({
     return body;
   }
 
-  // The card's own width is never animated — it stays exactly rowWidth
-  // (its natural flex-stretched size) for the entire gesture. Only its
-  // translateX moves: 1:1 with the finger up to REVEAL_DISTANCE, then
-  // resisted beyond it, exactly mirroring how far the capsule can grow.
-  const cardTranslateX = x.interpolate({
-    inputRange: [-maxRaw, -REVEAL_DISTANCE, 0, REVEAL_DISTANCE, maxRaw],
-    outputRange: [-maxEffective, -REVEAL_DISTANCE, 0, REVEAL_DISTANCE, maxEffective],
-    extrapolate: 'clamp',
-  });
-
-  // Capsule width = how far the card has receded, minus the fixed gap —
-  // this keeps the capsule always exactly ACTION_GAP away from the card's
-  // moving edge, whether in the 1:1 zone or the resisted full-swipe zone.
-  const favPillWidth = x.interpolate({
-    inputRange: [-maxRaw, -REVEAL_DISTANCE, -ACTION_GAP],
-    outputRange: [maxEffective - ACTION_GAP, CAPSULE_MAX, 0],
-    extrapolate: 'clamp',
-  });
-  const delPillWidth = x.interpolate({
-    inputRange: [ACTION_GAP, REVEAL_DISTANCE, maxRaw],
-    outputRange: [0, CAPSULE_MAX, maxEffective - ACTION_GAP],
-    extrapolate: 'clamp',
-  });
-
-  const favIconOpacity = x.interpolate({
-    inputRange: [-REVEAL_DISTANCE * 0.5, -ACTION_GAP],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
-  const delIconOpacity = x.interpolate({
-    inputRange: [ACTION_GAP, REVEAL_DISTANCE * 0.5],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  // One continuous curve: starts small on reveal (0.85), settles at normal
-  // size (1) once resting-open, then pulses up (1.1) once armed for commit.
-  const favIconScale = x.interpolate({
-    inputRange: [-fullThreshold, -fullThreshold * 0.85, -REVEAL_DISTANCE, -ACTION_GAP],
-    outputRange: [1.1, 1, 1, 0.85],
-    extrapolate: 'clamp',
-  });
-  const delIconScale = x.interpolate({
-    inputRange: [ACTION_GAP, REVEAL_DISTANCE, fullThreshold * 0.85, fullThreshold],
-    outputRange: [0.85, 1, 1, 1.1],
-    extrapolate: 'clamp',
-  });
-
   return (
-    <View
-      style={styles.rowWrap}
+    <Animated.View
+      style={[styles.rowWrap, wrapStyle]}
+      pointerEvents={removing ? 'none' : 'auto'}
       onLayout={(e) => {
-        const w = e.nativeEvent.layout.width;
-        if (w > 0 && Math.abs(w - rowWidth) > 0.5) setRowWidth(w);
+        const { width, height } = e.nativeEvent.layout;
+        if (width > 0) rowW.value = width;
+        if (height > 0 && removeP.value === 1) rowH.value = height;
       }}
     >
       {onToggleFav ? (
-        <Animated.View style={[styles.pillSlot, styles.pillSlotRight, { width: favPillWidth }]}>
+        <Animated.View style={[styles.capsuleSlot, styles.capsuleSlotRight, favCapsuleStyle]}>
           <Pressable
             onPress={handleFavTap}
             accessibilityRole="button"
             accessibilityLabel={isFav ? 'Favorilerden çıkar' : 'Favoriye ekle'}
-            style={[styles.actionPill, { backgroundColor: colors.swipeFavorite }]}
+            style={[styles.capsule, { backgroundColor: colors.swipeFavorite }]}
           >
-            <Animated.View style={{ opacity: favIconOpacity, transform: [{ scale: favIconScale }] }}>
+            <Animated.View style={favIconStyle}>
               <StarIcon size={22} color="#fff" filled={!!isFav} />
             </Animated.View>
           </Pressable>
@@ -298,31 +355,24 @@ export default function ItemRow({
       ) : null}
 
       {canDelete ? (
-        <Animated.View style={[styles.pillSlot, styles.pillSlotLeft, { width: delPillWidth }]}>
+        <Animated.View style={[styles.capsuleSlot, styles.capsuleSlotLeft, delCapsuleStyle]}>
           <Pressable
             onPress={handleDeleteTap}
             accessibilityRole="button"
             accessibilityLabel="Kaydı sil"
-            style={[styles.actionPill, { backgroundColor: colors.swipeDelete }]}
+            style={[styles.capsule, { backgroundColor: colors.swipeDelete }]}
           >
-            <Animated.View style={{ opacity: delIconOpacity, transform: [{ scale: delIconScale }] }}>
+            <Animated.View style={delIconStyle}>
               <TrashIcon size={22} color="#fff" />
             </Animated.View>
           </Pressable>
         </Animated.View>
       ) : null}
 
-      <PanGestureHandler
-        onGestureEvent={handleGestureEvent}
-        onHandlerStateChange={handleStateChange}
-        activeOffsetX={[-10, 10]}
-        failOffsetY={[-8, 8]}
-      >
-        <Animated.View style={{ transform: [{ translateX: cardTranslateX }] }}>
-          {body}
-        </Animated.View>
-      </PanGestureHandler>
-    </View>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={cardStyle}>{body}</Animated.View>
+      </GestureDetector>
+    </Animated.View>
   );
 }
 
@@ -354,19 +404,16 @@ const styles = StyleSheet.create({
   fav: { color: colors.favorite, fontWeight: '600', fontSize: 12 },
   subtitle: { fontSize: 13, color: colors.textSecondary },
   rightLabel: { fontSize: 11.5, color: colors.textTertiary, flexShrink: 0 },
-  // The capsule lives behind the (always full-width) card, hugging the
-  // row's own outer edge — nothing ever needs to clip anything else.
-  pillSlot: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center' },
-  pillSlotRight: { right: 0 },
-  pillSlotLeft: { left: 0 },
-  actionPill: {
+  // The capsule lives behind the (always full-width) card, pinned to the
+  // row's own outer edge, so nothing ever has to clip anything else.
+  capsuleSlot: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center' },
+  capsuleSlotRight: { right: 0, alignItems: 'flex-end' },
+  capsuleSlotLeft: { left: 0, alignItems: 'flex-start' },
+  capsule: {
     flex: 1,
+    alignSelf: 'stretch',
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
   },
 });
