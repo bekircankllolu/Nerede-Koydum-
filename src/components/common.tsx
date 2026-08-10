@@ -1,10 +1,10 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import { colors, radii } from '../theme';
+import { colors, controls, radii, typography } from '../theme';
 import { MicIcon } from './icons';
 
 export function IconButton({
-  onPress, children, size = 44, bg = colors.card, accessibilityLabel, style,
+  onPress, children, size = controls.iconButton, bg = colors.card, accessibilityLabel, style,
 }: {
   onPress: () => void; children: React.ReactNode; size?: number; bg?: string;
   accessibilityLabel: string; style?: ViewStyle;
@@ -37,6 +37,7 @@ export function PrimaryButton({
       style={({ pressed }) => [
         styles.primaryBtn,
         { backgroundColor: bg, opacity: pressed && !disabled ? 0.9 : 1 },
+        pressed && !disabled && styles.pressedScale,
         style,
       ]}
     >
@@ -49,7 +50,12 @@ export function SecondaryButton({ label, onPress, style }: { label: string; onPr
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.secondaryBtn, pressed && { backgroundColor: '#E7E3D8' }, style]}
+      style={({ pressed }) => [
+        styles.secondaryBtn,
+        pressed && styles.secondaryBtnPressed,
+        pressed && styles.pressedScale,
+        style,
+      ]}
     >
       <Text style={styles.secondaryBtnText}>{label}</Text>
     </Pressable>
@@ -84,18 +90,22 @@ export function Spinner() {
 
 const styles = StyleSheet.create({
   primaryBtn: {
-    height: 54, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center',
+    height: controls.primaryHeight, borderRadius: radii.md,
+    alignItems: 'center', justifyContent: 'center',
   },
-  primaryBtnText: { fontWeight: '600', fontSize: 17 },
+  primaryBtnText: { ...typography.headline },
   secondaryBtn: {
-    height: 52, borderRadius: radii.md, alignItems: 'center', justifyContent: 'center',
+    height: controls.secondaryHeight, borderRadius: radii.md,
+    alignItems: 'center', justifyContent: 'center',
     backgroundColor: colors.neutralChip,
   },
-  secondaryBtnText: { fontWeight: '600', fontSize: 16, color: colors.textPrimary },
-  micBtn: {
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    shadowColor: colors.indigo, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
-  },
+  secondaryBtnText: { ...typography.bodyStrong, color: colors.textPrimary },
+  // Deliberately no coloured glow — the mic is part of the search row, not a
+  // floating neon button.
+  micBtn: { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   spinnerWrap: { padding: 20, alignItems: 'center', justifyContent: 'center' },
   iconBtn: { alignItems: 'center', justifyContent: 'center' },
+  secondaryBtnPressed: { backgroundColor: colors.neutralChipPressed },
+  /** Shared press feel: a barely-there settle rather than a bounce. */
+  pressedScale: { transform: [{ scale: 0.99 }] },
 });

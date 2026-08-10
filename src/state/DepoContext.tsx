@@ -3,7 +3,7 @@ import React, {
 } from 'react';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import * as Haptics from 'expo-haptics';
+import { haptics } from '../lib/haptics';
 import * as db from '../db';
 import type { Item } from '../db';
 import { search, daysBetween, formatAgo, initialOf, shortLoc, fullLoc, splitLoc, titleCaseFirst } from '../lib/search';
@@ -42,12 +42,6 @@ function daysSince(it: Item, now: number) {
   return daysBetween(it.updatedAt, now);
 }
 
-function lightHaptic() {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-}
-function successHaptic() {
-  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-}
 
 export function useDepoStore() {
   const [booting, setBooting] = useState(true);
@@ -141,8 +135,22 @@ export function useDepoStore() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const now = Date.now();
+  // Relative labels ("3 gün önce") only need minute resolution. Bucketing to
+  // the minute keeps this value identical across renders inside the same
+  // minute, so the derived-list useMemos below aren't invalidated on every
+  // single render the way a raw Date.now() would.
+  const now = Math.floor(Date.now() / 60000) * 60000;
   const results = useMemo(() => search(items, q, (it) => daysSince(it, now)), [items, q, now]);
+
+  // Row callbacks read the latest items/selection through refs so they can
+  // stay referentially stable — that is what lets ItemRow's React.memo
+  // actually skip work while a long list scrolls.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const selIdRef = useRef(selId);
+  selIdRef.current = selId;
+
+  const openItem = useCallback((id: string) => setSelId(id), []);
 
   function card(it: Item) {
     return {
@@ -151,7 +159,7 @@ export function useDepoStore() {
       initial: initialOf(it.name),
       shortLoc: it.status === 'lost' ? (it.loc ? shortLoc(it.loc) : db.UNKNOWN_LOCATION) : shortLoc(it.loc),
       fullLoc: it.loc ? fullLoc(it.loc) : db.UNKNOWN_LOCATION,
-      favMark: it.fav ? '★' : '',
+      fav: it.fav,
       ago: formatAgo(it.updatedAt, now),
       colorKey: it.colorKey,
       lost: it.status === 'lost',
@@ -184,11 +192,11 @@ export function useDepoStore() {
   // window is still open — otherwise an unrelated refresh (favouriting
   // another item, an edit, a move) would resurrect a just-deleted row,
   // since its DB record deliberately still exists.
-  async function refreshItems() {
+  const refreshItems = useCallback(async () => {
     const loaded = await db.listItems();
     const pending = pendingDeletesRef.current;
     setItems(pending.size ? loaded.filter((it) => !pending.has(it.id)) : loaded);
-  }
+  }, []);
 
   function resetForm() {
     setFormName('');
@@ -261,7 +269,7 @@ export function useDepoStore() {
         setFormOpen(false);
         setScreen('find');
         setQ('');
-        successHaptic();
+        haptics.success();
         flash('Kaydettim.', `${created.name} — ${created.loc}`);
       } else if (formMode === 'lost-create') {
         const loc = formLocUnknown ? '' : formLoc;
@@ -271,7 +279,7 @@ export function useDepoStore() {
         await refreshItems();
         setFormOpen(false);
         setScreen('lost');
-        successHaptic();
+        haptics.success();
         flash('Kayıp olarak kaydettim.', created.name);
       } else if (formMode === 'edit' && formEditingId) {
         const id = formEditingId;
@@ -312,7 +320,7 @@ export function useDepoStore() {
 
   async function toggleFav() {
     if (!selected) return;
-    lightHaptic();
+    haptics.light();
     await db.toggleFavorite(selected.id, !selected.fav);
     await refreshItems();
   }
@@ -321,7 +329,7 @@ export function useDepoStore() {
     if (!selId) return;
     await db.confirmItem(selId);
     await refreshItems();
-    successHaptic();
+    haptics.success();
     flash('Yerini doğruladım.', 'Kayıt güncel olarak işaretlendi.');
   }
 
@@ -335,48 +343,30 @@ export function useDepoStore() {
 
   // Row-level variants for the list swipe actions, which act on an arbitrary
   // item rather than the one currently open in the detail screen.
-  async function toggleFavById(id: string) {
-    const it = items.find((x) => x.id === id);
+  const toggleFavById = useCallback(async (id: string) => {
+    const it = itemsRef.current.find((x) => x.id === id);
     if (!it) return;
     await db.toggleFavorite(id, !it.fav);
     await refreshItems();
     flash(it.fav ? 'Favorilerden çıkarıldı.' : 'Favorilere eklendi.', it.name);
-  }
+  }, [refreshItems, flash]);
 
-  async function deleteItemById(id: string) {
-    const it = items.find((x) => x.id === id);
+  const deleteItemById = useCallback(async (id: string) => {
+    const it = itemsRef.current.find((x) => x.id === id);
     if (!it) return;
     await db.deleteItemDb(id);
-    if (selId === id) setSelId(null);
+    if (selIdRef.current === id) setSelId(null);
     await refreshItems();
     flash('Kayıt silindi.', `${it.name} — fotoğrafı da kaldırıldı.`);
-  }
+  }, [refreshItems, flash]);
 
   // Full-swipe delete: no confirmation Alert (the full swipe itself is the
   // deliberate gesture) — instead it's optimistic + undoable. The row
   // disappears immediately; the DB row is only actually deleted once the
   // undo window lapses without the user tapping "Geri Al".
-  function deleteItemByIdWithUndo(id: string) {
-    const it = items.find((x) => x.id === id);
-    if (!it || pendingDeletesRef.current.has(id)) return;
-
-    // Each delete gets its own timer/entry, so two deletes started seconds
-    // apart can never clobber each other's pending state.
-    setItems((prev) => prev.filter((x) => x.id !== id));
-    if (selId === id) setSelId(null);
-
-    const timer = setTimeout(() => { commitPendingDelete(id); }, UNDO_WINDOW_MS);
-    pendingDeletesRef.current.set(id, { item: it, timer });
-
-    flash('Kayıt silindi.', it.name, {
-      label: 'Geri Al',
-      onPress: () => undoDelete(id),
-    });
-  }
-
   // Undo window lapsed: the row really goes. A failed DB delete must not be
   // swallowed — the item comes back so the user never silently loses data.
-  async function commitPendingDelete(id: string) {
+  const commitPendingDelete = useCallback(async (id: string) => {
     const entry = pendingDeletesRef.current.get(id);
     if (!entry) return;
     try {
@@ -387,19 +377,37 @@ export function useDepoStore() {
       await refreshItems();
       flash('Kayıt silinemedi.', `${entry.item.name} geri getirildi.`);
     }
-  }
+  }, [refreshItems, flash]);
 
   // The DB row was never touched during the undo window, so restoring is a
   // plain reload — no re-insert, hence no duplicate row and no lost history.
-  async function undoDelete(id: string) {
+  const undoDelete = useCallback(async (id: string) => {
     const entry = pendingDeletesRef.current.get(id);
     if (!entry) return;
     clearTimeout(entry.timer);
     pendingDeletesRef.current.delete(id);
-    lightHaptic();
+    haptics.light();
     setToast(null);
     await refreshItems();
-  }
+  }, [refreshItems]);
+
+  const deleteItemByIdWithUndo = useCallback((id: string) => {
+    const it = itemsRef.current.find((x) => x.id === id);
+    if (!it || pendingDeletesRef.current.has(id)) return;
+
+    // Each delete gets its own timer/entry, so two deletes started seconds
+    // apart can never clobber each other's pending state.
+    setItems((prev) => prev.filter((x) => x.id !== id));
+    if (selIdRef.current === id) setSelId(null);
+
+    const timer = setTimeout(() => { commitPendingDelete(id); }, UNDO_WINDOW_MS);
+    pendingDeletesRef.current.set(id, { item: it, timer });
+
+    flash('Kayıt silindi.', it.name, {
+      label: 'Geri Al',
+      onPress: () => undoDelete(id),
+    });
+  }, [commitPendingDelete, undoDelete, flash]);
 
   async function markLost() {
     if (!selId) return;
@@ -423,7 +431,7 @@ export function useDepoStore() {
     await refreshItems();
     setFoundSheetOpen(false);
     setFoundLocVal('');
-    successHaptic();
+    haptics.success();
     flash('Buldun!', 'Yeni yerini kaydettim.');
   }
 
@@ -637,6 +645,7 @@ export function useDepoStore() {
     selId,
     selected,
     detail,
+    openItem,
     closeDetail: () => setSelId(null),
     toggleFav,
     confirmLoc,

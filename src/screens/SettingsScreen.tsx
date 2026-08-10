@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, radii } from '../theme';
+import { colors, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { ChevronRight } from '../components/icons';
 
@@ -116,28 +116,31 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 },
-  title: { fontWeight: '700', fontSize: 30, letterSpacing: -0.7, color: colors.textPrimary, marginBottom: 20 },
-  proCard: { borderRadius: radii.lg, backgroundColor: colors.paywallBg, padding: 20, gap: 6 },
-  proTitle: { fontWeight: '600', fontSize: 17, color: '#fff' },
-  proSub: { fontSize: 13.5, lineHeight: 18, color: 'rgba(255,255,255,0.68)' },
-  section: { marginTop: 20 },
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 100 },
+  title: { ...typography.largeTitle, color: colors.textPrimary, marginBottom: spacing.xl },
+  proCard: { borderRadius: radii.lg, backgroundColor: colors.paywallBg, padding: spacing.xl, gap: spacing.xs + 2 },
+  proTitle: { ...typography.headline, color: '#fff' },
+  proSub: { ...typography.footnote, color: 'rgba(255,255,255,0.68)' },
+  section: { marginTop: spacing.xl },
   sectionLabel: {
-    fontWeight: '600', fontSize: 11.5, color: colors.textTertiary, letterSpacing: 0.6,
-    marginBottom: 8, paddingLeft: 4,
+    ...typography.overline, color: colors.textTertiary,
+    marginBottom: spacing.sm, paddingLeft: spacing.xs,
   },
-  rowsCard: {
-    borderRadius: radii.md, backgroundColor: colors.card, overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
-  },
+  // Grouped like iOS Settings: one hairline-bounded surface per section
+  // instead of a stack of individually shadowed cards.
+  rowsCard: { ...surfaces.card, overflow: 'hidden' },
   row: {
-    paddingVertical: 15, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
+    paddingVertical: spacing.lg - 1, paddingHorizontal: spacing.lg,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
-  rowLabel: { fontSize: 16, color: colors.textPrimary },
-  rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  rowValue: { fontSize: 14, color: colors.textTertiary },
-  footNote: { marginTop: 18, padding: 16, borderRadius: radii.md, backgroundColor: colors.indigoLight, gap: 6 },
-  footNoteTitle: { fontWeight: '600', fontSize: 14, color: colors.indigo },
-  footNoteBody: { fontSize: 13, lineHeight: 18.5, color: colors.textSecondary },
+  rowLabel: { ...typography.body, color: colors.textPrimary },
+  rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  rowValue: { ...typography.subheadline, color: colors.textTertiary },
+  footNote: {
+    marginTop: spacing.lg + 2, padding: spacing.lg, borderRadius: radii.md,
+    backgroundColor: colors.indigoLight, gap: spacing.xs + 2,
+  },
+  footNoteTitle: { ...typography.subheadline, fontWeight: '600', color: colors.indigo },
+  footNoteBody: { ...typography.footnote, color: colors.textSecondary },
 });
