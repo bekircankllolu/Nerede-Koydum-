@@ -6,7 +6,7 @@ import type { Item } from '../db';
 import { daysBetween } from '../lib/search';
 import ItemRow from '../components/ItemRow';
 import EmptyState from '../components/EmptyState';
-import { PlusIcon } from '../components/icons';
+import { PlusIcon, TabLostIcon } from '../components/icons';
 
 function lostAgeLabel(item: Item, now: number) {
   const days = Math.max(0, daysBetween(item.lostAt || item.updatedAt, now));
@@ -31,6 +31,7 @@ export default function LostItemsScreen() {
         subtitle={c.fullLoc}
         onPress={openItem}
         rightLabel={lostAgeLabel(item, now)}
+        rightLabelColor={colors.lost}
         colorKey={c.colorKey}
         showChevron
       />
@@ -40,7 +41,7 @@ export default function LostItemsScreen() {
   const header = (
     <View style={styles.header}>
       <View style={styles.headerText}>
-        <Text style={styles.title}>Kayıp Eşyalar</Text>
+        <Text style={styles.title}>Kayıplar</Text>
         <Text style={styles.subtitle}>Bulamadığın eşyaları burada takip et.</Text>
       </View>
       <Pressable
@@ -65,7 +66,8 @@ export default function LostItemsScreen() {
       ListHeaderComponent={header}
       ListEmptyComponent={
         <EmptyState
-          title="Harika, şu an kayıp eşyan yok."
+          icon={<TabLostIcon size={26} color={colors.indigo} />}
+          title="Şu an kayıp eşyan yok."
           body="Bir şeyi bulamazsan burada takip edebilirsin."
           ctaLabel="Kayıp bildir"
           onPress={openLostForm}

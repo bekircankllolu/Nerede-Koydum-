@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairlineStrong,
     flexDirection: 'row', alignItems: 'flex-start',
   },
-  tab: { flex: 1, alignItems: 'center', gap: spacing.xs + 1, paddingTop: spacing.xs + 2 },
-  label: { ...typography.caption, fontSize: 10, lineHeight: 13 },
+  tab: { flex: 1, alignItems: 'center', gap: spacing.xs, paddingTop: spacing.xs + 1 },
+  label: { ...typography.caption, fontSize: 11, lineHeight: 14 },
   dot: { width: 4, height: 4, borderRadius: 2, marginTop: 1 },
 });

@@ -24,6 +24,8 @@ type Props = {
   /** Passive favourite marker on the row (not the swipe action). */
   showFavMark?: boolean;
   rightLabel?: string;
+  /** Primitive so React.memo still short-circuits. */
+  rightLabelColor?: string;
   showChevron?: boolean;
   colorKey?: ItemColorKey;
   lost?: boolean;
@@ -77,7 +79,7 @@ function toRaw(effective: number): number {
 const openRow: { current: { id: object; close: () => void } | null } = { current: null };
 
 function ItemRow({
-  id, initial, name, subtitle, onPress, avatarSize = 48, showFavMark, rightLabel, showChevron,
+  id, initial, name, subtitle, onPress, avatarSize = 48, showFavMark, rightLabel, rightLabelColor, showChevron,
   colorKey = 'indigo', lost, isFav, onToggleFav, onDeleteConfirm, onFullSwipeDelete,
 }: Props) {
   const swipeEnabled = !!(onToggleFav || onDeleteConfirm || onFullSwipeDelete);
@@ -328,7 +330,14 @@ function ItemRow({
         </View>
         <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
       </View>
-      {rightLabel ? <Text style={styles.rightLabel} numberOfLines={1}>{rightLabel}</Text> : null}
+      {rightLabel ? (
+        <Text
+          style={[styles.rightLabel, rightLabelColor ? { color: rightLabelColor } : null]}
+          numberOfLines={1}
+        >
+          {rightLabel}
+        </Text>
+      ) : null}
       {showChevron ? <ChevronRight /> : null}
     </Pressable>
   );

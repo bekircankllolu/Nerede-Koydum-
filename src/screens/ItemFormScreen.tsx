@@ -1,11 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
-import { colors, motion, radii, surfaces } from '../theme';
+import { colors, controls, motion, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, MicButton } from '../components/common';
 import ColorPicker from '../components/ColorPicker';
@@ -59,6 +59,9 @@ export default function ItemFormScreen() {
   const copy = COPY[formMode];
   const isLostCreate = formMode === 'lost-create';
   const locRef = useRef<TextInput>(null);
+  // Focus is shown by tinting the existing hairline — no glow, no size change,
+  // so nothing in the layout shifts when the keyboard arrives.
+  const [focused, setFocused] = useState<'name' | 'loc' | null>(null);
 
   const choosePhoto = async (pick: () => Promise<PhotoPick>, what: string) => {
     const result = await pick();
@@ -89,7 +92,10 @@ export default function ItemFormScreen() {
             </View>
           ) : (
             <View style={styles.photoBox}>
-              <PhotoIcon size={30} />
+              <View style={styles.photoBoxHead}>
+                <PhotoIcon size={22} />
+                <Text style={styles.photoBoxLabel}>Fotoğraf ekle</Text>
+              </View>
               <View style={styles.photoActions}>
                 <Pressable
                   style={({ pressed }) => [styles.photoActionBtn, pressed && styles.pressed]}
@@ -111,12 +117,14 @@ export default function ItemFormScreen() {
             </View>
           )}
 
-          <View style={{ marginTop: 22, gap: 9 }}>
+          <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{copy.nameLabel}</Text>
             <View style={styles.fieldRow}>
-              <View style={styles.fieldBox}>
+              <View style={[styles.fieldBox, focused === 'name' && styles.fieldBoxFocused]}>
                 <TextInput
                   value={formName}
+                  onFocus={() => setFocused('name')}
+                  onBlur={() => setFocused(null)}
                   onChangeText={setFormName}
                   placeholder={copy.namePh}
                   placeholderTextColor={colors.textSecondary}
@@ -129,7 +137,7 @@ export default function ItemFormScreen() {
             </View>
           </View>
 
-          <View style={{ marginTop: 18, gap: 9 }}>
+          <View style={styles.fieldGroup}>
             <Text style={styles.fieldLabel}>{copy.locLabel}</Text>
             {isLostCreate && formLocUnknown ? (
               <View style={styles.unknownLocBox}>
@@ -137,10 +145,12 @@ export default function ItemFormScreen() {
               </View>
             ) : (
               <View style={styles.fieldRow}>
-                <View style={styles.fieldBox}>
+                <View style={[styles.fieldBox, focused === 'loc' && styles.fieldBoxFocused]}>
                   <TextInput
                     ref={locRef}
                     value={formLoc}
+                    onFocus={() => setFocused('loc')}
+                    onBlur={() => setFocused(null)}
                     onChangeText={setFormLoc}
                     placeholder="Yatak odası, beyaz dolap, üst çekmece"
                     placeholderTextColor={colors.textSecondary}
@@ -164,7 +174,7 @@ export default function ItemFormScreen() {
               </Pressable>
             ) : null}
             {!isLostCreate || !formLocUnknown ? (
-              <View style={{ gap: 7, marginTop: 4 }}>
+              <View style={styles.suggestionRow}>
                 {locSuggestions.map((s) => (
                   <Pressable
                     key={s}
@@ -180,7 +190,9 @@ export default function ItemFormScreen() {
             ) : null}
           </View>
 
-          <View style={{ marginTop: 20, gap: 9 }}>
+          {/* Colour and note are optional: they get a tighter rhythm so they
+              never compete with name/location for attention. */}
+          <View style={styles.secondaryGroup}>
             <Text style={styles.fieldLabel}>Renk</Text>
             <ColorPicker value={formColorKey} onChange={setFormColorKey} />
           </View>
@@ -207,6 +219,7 @@ export default function ItemFormScreen() {
         <View style={styles.footer}>
           <PrimaryButton
             label={formSaving ? 'Kaydediliyor…' : copy.save}
+            loading={formSaving}
             onPress={saveForm}
             disabled={!formValid || formSaving}
             bg={formValid && !formSaving ? (isLostCreate ? colors.indigo : colors.accent) : colors.indigoSoftDisabled}
@@ -220,53 +233,77 @@ export default function ItemFormScreen() {
 const styles = StyleSheet.create({
   root: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40, backgroundColor: colors.appBg },
   header: {
-    paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row',
+    paddingHorizontal: spacing.xl, paddingVertical: spacing.md, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'space-between',
   },
-  headerTitle: { fontWeight: '600', fontSize: 18, color: colors.textPrimary },
-  cancel: { color: colors.indigo, fontWeight: '500', fontSize: 16 },
+  headerTitle: { ...typography.title3, color: colors.textPrimary },
+  cancel: { ...typography.body, color: colors.indigo, fontWeight: '500' },
   cancelDisabled: { opacity: 0.4 },
-  content: { paddingHorizontal: 20, paddingBottom: 20 },
+  content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  // Compact when there's no photo yet: a 4:3 empty frame used to swallow the
+  // top third of the screen before the user had typed anything.
   photoBox: {
-    borderRadius: radii.lg, backgroundColor: colors.photoPlaceholderBg, aspectRatio: 4 / 3,
+    borderRadius: radii.lg, backgroundColor: colors.photoPlaceholderBg, height: 130,
     borderWidth: 1, borderStyle: 'dashed', borderColor: colors.photoPlaceholderBorder,
-    alignItems: 'center', justifyContent: 'center', gap: 14,
+    alignItems: 'center', justifyContent: 'center', gap: spacing.md,
   },
-  photoActions: { flexDirection: 'row', gap: 9 },
-  photoActionBtn: { paddingVertical: 10, paddingHorizontal: 15, borderRadius: radii.sm, backgroundColor: colors.card },
-  photoActionText: { fontWeight: '600', fontSize: 14, color: colors.textPrimary },
+  photoBoxHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  photoBoxLabel: { ...typography.callout, color: colors.textWarm },
+  photoActions: { flexDirection: 'row', gap: spacing.sm + 2 },
+  photoActionBtn: {
+    minHeight: controls.compactHeight, justifyContent: 'center',
+    paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.lg - 1,
+    borderRadius: radii.sm, backgroundColor: colors.card,
+  },
+  photoActionText: { ...typography.subheadline, fontWeight: '600', color: colors.textPrimary },
+  // A chosen photo is worth showing large.
   photoPreviewWrap: { borderRadius: radii.lg, overflow: 'hidden', aspectRatio: 4 / 3 },
   photoPreview: { width: '100%', height: '100%' },
   removePhoto: {
-    position: 'absolute', right: 10, top: 10, backgroundColor: 'rgba(22,22,22,0.6)',
-    paddingVertical: 6, paddingHorizontal: 12, borderRadius: radii.sm,
+    position: 'absolute', right: spacing.sm + 2, top: spacing.sm + 2,
+    minHeight: 34, justifyContent: 'center',
+    backgroundColor: 'rgba(22,22,22,0.6)',
+    paddingVertical: spacing.xs + 2, paddingHorizontal: spacing.md,
+    borderRadius: radii.sm,
   },
-  removePhotoText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  fieldLabel: { fontWeight: '600', fontSize: 13, color: colors.textSecondary, paddingLeft: 4 },
-  fieldRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  removePhotoText: { ...typography.footnote, fontWeight: '600', color: '#fff' },
+  fieldGroup: { marginTop: spacing.xl, gap: spacing.sm + 1 },
+  secondaryGroup: { marginTop: spacing.lg, gap: spacing.sm },
+  fieldLabel: { ...typography.footnote, fontWeight: '600', color: colors.textSecondary, paddingLeft: spacing.xs },
+  fieldRow: { flexDirection: 'row', gap: spacing.sm + 2, alignItems: 'center' },
   fieldBox: {
     ...surfaces.card,
-    flex: 1, height: 56, justifyContent: 'center', paddingHorizontal: 16,
+    flex: 1, height: controls.fieldHeight, justifyContent: 'center', paddingHorizontal: spacing.lg,
   },
-  fieldInput: { fontSize: 17, color: colors.textPrimary, padding: 0 },
-  fieldInputLoc: { fontSize: 16, color: colors.textPrimary, padding: 0 },
+  fieldBoxFocused: { borderColor: colors.indigoSoftDisabled },
+  fieldInput: { ...typography.headline, fontWeight: '400', color: colors.textPrimary, padding: 0 },
+  fieldInputLoc: { ...typography.body, color: colors.textPrimary, padding: 0 },
   pressed: { opacity: 0.85 },
   unknownLocBox: {
-    height: 56, borderRadius: radii.md, backgroundColor: colors.neutralChip, justifyContent: 'center', paddingHorizontal: 16,
+    height: controls.fieldHeight, borderRadius: radii.md, backgroundColor: colors.neutralChip,
+    justifyContent: 'center', paddingHorizontal: spacing.lg,
   },
-  unknownLocText: { fontSize: 16, color: colors.neutralChipText, fontWeight: '500' },
-  unknownToggle: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 2, paddingVertical: 4 },
+  unknownLocText: { ...typography.body, fontWeight: '500', color: colors.neutralChipText },
+  unknownToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 1,
+    marginTop: 2, paddingVertical: spacing.sm,
+  },
   checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.6, borderColor: colors.textTertiary },
   checkboxOn: { backgroundColor: colors.indigo, borderColor: colors.indigo },
-  unknownToggleText: { fontSize: 14, color: colors.textSecondary, fontWeight: '500' },
-  suggestion: { paddingVertical: 11, paddingHorizontal: 14, borderRadius: radii.sm, backgroundColor: colors.neutralChip },
-  suggestionText: { fontSize: 14, lineHeight: 16.8, color: colors.neutralChipText },
-  noteToggle: { marginTop: 18, paddingVertical: 4 },
-  noteToggleText: { fontWeight: '600', fontSize: 15, color: colors.indigo },
-  noteBox: { ...surfaces.card, marginTop: 4, padding: 14 },
-  noteInput: { fontSize: 15, lineHeight: 21, color: colors.textPrimary, padding: 0, minHeight: 24 },
+  unknownToggleText: { ...typography.subheadline, fontWeight: '500', color: colors.textSecondary },
+  suggestionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
+  suggestion: {
+    paddingVertical: spacing.sm + 1, paddingHorizontal: spacing.md,
+    borderRadius: radii.pill, backgroundColor: colors.neutralChip, maxWidth: '100%',
+  },
+  suggestionText: { ...typography.footnote, color: colors.neutralChipText },
+  noteToggle: { marginTop: spacing.lg, paddingVertical: spacing.sm },
+  noteToggleText: { ...typography.callout, fontWeight: '600', color: colors.indigo },
+  noteBox: { ...surfaces.card, marginTop: spacing.xs, padding: spacing.md + 2 },
+  noteInput: { ...typography.callout, fontWeight: '400', lineHeight: 21, color: colors.textPrimary, padding: 0, minHeight: 24 },
   footer: {
-    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12,
-    backgroundColor: 'rgba(247,245,240,0.96)', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairlineStrong,
+    paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.md,
+    backgroundColor: 'rgba(247,245,240,0.96)',
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairlineStrong,
   },
 });

@@ -36,7 +36,12 @@ export default function FindScreen() {
             style={styles.searchInput}
           />
           {hasQuery ? (
-            <Pressable onPress={() => setQ('')} hitSlop={8}>
+            <Pressable
+              onPress={() => setQ('')}
+              style={styles.clearBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Aramayı temizle"
+            >
               <CloseIcon size={16} />
             </Pressable>
           ) : null}
@@ -173,6 +178,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2, paddingHorizontal: spacing.lg,
   },
   searchInput: { flex: 1, ...typography.headline, fontWeight: '400', color: colors.textPrimary, padding: 0 },
+  // Small glyph, full-height tap target: the icon stays visually light but
+  // is comfortably hittable.
+  clearBtn: {
+    width: controls.iconButton, height: '100%',
+    alignItems: 'center', justifyContent: 'center', marginRight: -spacing.sm,
+  },
   bestCard: { ...surfaces.hero, padding: spacing.xxl - 2, gap: spacing.lg },
   bestLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bestLabel: { ...typography.overline, color: colors.accent, textTransform: 'uppercase' },
@@ -187,7 +198,7 @@ const styles = StyleSheet.create({
     padding: spacing.xxl - 2, paddingVertical: spacing.xxl + 2, gap: spacing.md + 2,
   },
   noResultsTitle: { ...typography.title3, color: colors.textPrimary },
-  noResultsBody: { ...typography.callout, fontWeight: '400', color: colors.textSecondary },
+  noResultsBody: { ...typography.subheadline, color: colors.textTertiary },
   noResultsCta: {
     height: controls.secondaryHeight, borderRadius: radii.md, backgroundColor: colors.indigoLight,
     alignItems: 'center', justifyContent: 'center',
@@ -197,12 +208,12 @@ const styles = StyleSheet.create({
   noResultsLostCtaText: { ...typography.footnote, color: colors.lost, fontWeight: '500' },
   quickAdd: {
     marginTop: spacing.xl, borderRadius: radii.xl, backgroundColor: colors.indigoLight,
-    padding: spacing.xxl - 2, gap: spacing.xs + 2,
+    padding: spacing.xl, gap: spacing.xs,
   },
   quickAddTitle: { ...typography.title3, color: colors.textPrimary },
   quickAddBody: { ...typography.callout, fontWeight: '400', color: colors.indigo },
   quickAddBtn: {
-    marginTop: spacing.md + 2, height: controls.secondaryHeight, borderRadius: radii.md,
+    marginTop: spacing.md, height: controls.secondaryHeight, borderRadius: radii.md,
     backgroundColor: colors.indigo,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
   },
