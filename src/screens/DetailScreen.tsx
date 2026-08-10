@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
@@ -6,6 +6,7 @@ import { colors, motion, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, SecondaryButton } from '../components/common';
 import { PhotoIcon, StarIcon } from '../components/icons';
+import { photoFileExists } from '../lib/photoStorage';
 
 const AnimatedSafeArea = Animated.createAnimatedComponent(SafeAreaView);
 
@@ -14,6 +15,9 @@ export default function DetailScreen() {
     detail, closeDetail, toggleFav, openMove, confirmLoc, deleteItem, openEditForm, markLost, openFoundSheet,
   } = useDepo();
   const reduced = useReducedMotion();
+  // A stored photo whose file has gone missing must degrade to a placeholder
+  // rather than rendering a broken image or crashing the screen.
+  const [photoBroken, setPhotoBroken] = useState(false);
   const d = detail();
   if (!d) return null;
 
@@ -22,6 +26,9 @@ export default function DetailScreen() {
   const entering = reduced
     ? FadeIn.duration(motion.duration.fast)
     : FadeInDown.duration(motion.duration.normal).withInitialValues({ transform: [{ translateY: 8 }] });
+
+  const photoMissing = !!d.item.photoUri && !photoFileExists(d.item.photoUri);
+  const showPhoto = !!d.item.photoUri && !photoBroken && !photoMissing;
 
   const onDelete = () => {
     Alert.alert('Bu kaydı silmek istediğine emin misin?', d.name + ' kalıcı olarak silinecek.', [
@@ -53,12 +60,19 @@ export default function DetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {d.item.photoUri ? (
-          <Image source={{ uri: d.item.photoUri }} style={styles.photo} resizeMode="cover" />
+        {showPhoto ? (
+          <Image
+            source={{ uri: d.item.photoUri as string }}
+            style={styles.photo}
+            resizeMode="cover"
+            onError={() => setPhotoBroken(true)}
+          />
         ) : (
           <View style={styles.photoPlaceholder}>
             <PhotoIcon />
-            <Text style={styles.photoPlaceholderText}>Fotoğraf eklenmedi</Text>
+            <Text style={styles.photoPlaceholderText}>
+              {d.item.photoUri ? 'Fotoğraf kullanılamıyor' : 'Fotoğraf eklenmedi'}
+            </Text>
           </View>
         )}
 
@@ -86,12 +100,18 @@ export default function DetailScreen() {
           {d.isLost ? (
             <Text style={styles.lostLine}>{d.lostDaysLabel}</Text>
           ) : (
-            <Text style={styles.confirmed}>{d.confirmed}</Text>
+            <Text style={d.stale ? styles.confirmedStale : styles.confirmed}>
+              {d.stale ? `${d.confirmed} Hâlâ orada mı?` : d.confirmed}
+            </Text>
           )}
           {!d.isLost ? (
             <View style={styles.locActions}>
               <PrimaryButton label="Yerini değiştir" onPress={openMove} style={{ flex: 1, height: 52 }} />
-              <SecondaryButton label="Konumu doğrula" onPress={confirmLoc} style={{ flex: 1, backgroundColor: colors.indigoLight }} />
+              <SecondaryButton
+                label="Konumu doğrula"
+                onPress={confirmLoc}
+                style={d.stale ? styles.confirmBtnStale : styles.confirmBtn}
+              />
             </View>
           ) : null}
         </View>
@@ -115,6 +135,11 @@ export default function DetailScreen() {
 
         <Text style={styles.historyLabel}>Geçmiş</Text>
         <View style={styles.historyCard}>
+          {d.history.length === 0 ? (
+            <View style={styles.historyRow}>
+              <Text style={styles.historyEmpty}>Henüz konum geçmişi yok.</Text>
+            </View>
+          ) : null}
           {d.history.map((h, i) => (
             <View key={i} style={[styles.historyRow, i === d.history.length - 1 && { borderBottomWidth: 0 }]}>
               <View style={[styles.dot, { backgroundColor: h.dot }]} />
@@ -162,6 +187,11 @@ const styles = StyleSheet.create({
   locPrimary: { ...typography.title2, color: colors.textPrimary },
   locPath: { ...typography.headline, color: colors.textSecondary },
   confirmed: { ...typography.footnote, color: colors.accent },
+  confirmedStale: { ...typography.footnote, color: colors.textSecondary },
+  confirmBtn: { flex: 1, backgroundColor: colors.indigoLight },
+  // Old records make the re-confirm action a little more inviting without
+  // displacing the primary "move it" action.
+  confirmBtnStale: { flex: 1, backgroundColor: colors.indigo },
   lostLine: { ...typography.footnote, color: colors.lost, fontWeight: '600' },
   locActions: { flexDirection: 'row', gap: spacing.sm + 2, marginTop: 2 },
   foundBtn: {
@@ -189,6 +219,7 @@ const styles = StyleSheet.create({
   },
   dot: { width: 8, height: 8, borderRadius: 99 },
   historyWhere: { flex: 1, ...typography.callout, color: colors.textPrimary },
+  historyEmpty: { ...typography.callout, color: colors.textTertiary },
   historyWhen: { ...typography.footnote, color: colors.textTertiary },
   deleteBtn: {
     marginTop: spacing.xxl + 2, alignSelf: 'center',

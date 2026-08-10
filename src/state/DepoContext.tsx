@@ -4,9 +4,10 @@ import React, {
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { haptics } from '../lib/haptics';
+import { deleteManagedPhoto, isManagedPhoto, persistPhoto } from '../lib/photoStorage';
 import * as db from '../db';
 import type { Item } from '../db';
-import { search, daysBetween, formatAgo, initialOf, shortLoc, fullLoc, splitLoc, titleCaseFirst } from '../lib/search';
+import { search, norm, daysBetween, formatAgo, initialOf, shortLoc, fullLoc, splitLoc, titleCaseFirst } from '../lib/search';
 import { itemsToCsv } from '../lib/csv';
 import { useVoiceRecognition } from '../lib/voice';
 import { colors, FREE_ITEM_LIMIT } from '../theme';
@@ -23,6 +24,12 @@ type PendingDelete = { item: Item; timer: ReturnType<typeof setTimeout> };
 
 /** How long "Geri Al" stays available before the DB row is really removed. */
 const UNDO_WINDOW_MS = 4500;
+
+/** Upper bound on the location list offered in the form. */
+const MAX_LOCATION_SUGGESTIONS = 6;
+
+/** After this long without confirmation, the detail screen suggests a re-check. */
+const STALE_LOCATION_DAYS = 90;
 
 const FILTER_DEFS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'Tümü' },
@@ -69,6 +76,9 @@ export function useDepoStore() {
   const [formPhotoUri, setFormPhotoUri] = useState<string | null>(null);
   const [formColorKey, setFormColorKey] = useState<ItemColorKey>(DEFAULT_ITEM_COLOR);
   const [formOriginalLoc, setFormOriginalLoc] = useState('');
+  // The photo the row already had when an edit started, so we can tell an
+  // untouched photo from a newly picked one.
+  const [formOriginalPhotoUri, setFormOriginalPhotoUri] = useState<string | null>(null);
   const [formSaving, setFormSaving] = useState(false);
 
   const [moveOpen, setMoveOpen] = useState(false);
@@ -178,6 +188,9 @@ export function useDepoStore() {
       lines: selected.loc ? splitLoc(selected.loc) : [db.UNKNOWN_LOCATION],
       note: selected.note,
       confirmed: `${formatAgo(selected.updatedAt, now)} doğrulandı.`,
+      // A location nobody has confirmed in months is worth a gentle nudge —
+      // stated calmly, since a stale record is normal, not an error.
+      stale: !isLost && daysBetween(selected.updatedAt, now) >= STALE_LOCATION_DAYS,
       isLost,
       lostDaysLabel: isLost && selected.lostAt ? `${Math.max(0, daysBetween(selected.lostAt, now))} gündür kayıp` : null,
       history: selected.history.map((h, i) => ({
@@ -207,6 +220,7 @@ export function useDepoStore() {
     setFormPhotoUri(null);
     setFormColorKey(DEFAULT_ITEM_COLOR);
     setFormOriginalLoc('');
+    setFormOriginalPhotoUri(null);
   }
 
   function openAddForm() {
@@ -227,6 +241,7 @@ export function useDepoStore() {
     setFormNote(selected.note);
     setFormNoteOpen(!!selected.note);
     setFormPhotoUri(selected.photoUri);
+    setFormOriginalPhotoUri(selected.photoUri);
     setFormColorKey(selected.colorKey);
     setFormOpen(true);
   }
@@ -253,45 +268,84 @@ export function useDepoStore() {
   const formValid = formName.trim().length > 0 &&
     (formMode === 'lost-create' ? (formLocUnknown || formLoc.trim().length > 0) : formLoc.trim().length > 0);
 
+  // Photo/DB ordering rule used throughout: copy the new photo in first, write
+  // the DB second, and only delete the old photo once the DB write actually
+  // succeeded. Never the other way round — a failed write must never be able
+  // to take the user's existing photo with it.
   async function saveForm() {
     if (!formValid || formSaving) return;
+
+    // Check the free limit before copying anything, so a blocked save can't
+    // leave an orphaned file behind.
+    if (formMode === 'create' && !isPro && items.length >= FREE_ITEM_LIMIT) {
+      setPaywall(true);
+      return;
+    }
+
     setFormSaving(true);
+    // Set when this save copied a new file in, so failures can roll it back.
+    let persistedPhotoUri: string | null = null;
+
     try {
-      if (formMode === 'create') {
-        if (!isPro && items.length >= FREE_ITEM_LIMIT) {
-          setPaywall(true);
+      const photoChanged = formPhotoUri !== formOriginalPhotoUri;
+      if (formPhotoUri && photoChanged && !isManagedPhoto(formPhotoUri)) {
+        try {
+          persistedPhotoUri = await persistPhoto(formPhotoUri);
+        } catch (err) {
+          if (__DEV__) console.error('[saveForm] persistPhoto failed', err);
+          flash('Fotoğraf kaydedilemedi.', 'Tekrar deneyebilirsin.');
           return;
         }
-        const created = await db.createItem({
-          name: formName, loc: formLoc, note: formNote, photoUri: formPhotoUri, colorKey: formColorKey,
-        });
-        await refreshItems();
-        setFormOpen(false);
-        setScreen('find');
-        setQ('');
-        haptics.success();
-        flash('Kaydettim.', `${created.name} — ${created.loc}`);
-      } else if (formMode === 'lost-create') {
-        const loc = formLocUnknown ? '' : formLoc;
-        const created = await db.createLostItem({
-          name: formName, loc, note: formNote, photoUri: formPhotoUri, colorKey: formColorKey,
-        });
-        await refreshItems();
-        setFormOpen(false);
-        setScreen('lost');
-        haptics.success();
-        flash('Kayıp olarak kaydettim.', created.name);
-      } else if (formMode === 'edit' && formEditingId) {
-        const id = formEditingId;
-        await db.updateItemDetails(id, {
-          name: formName, note: formNote, photoUri: formPhotoUri, colorKey: formColorKey,
-        });
-        if (formLoc.trim() && formLoc.trim() !== formOriginalLoc.trim()) {
-          await db.moveItem(id, formLoc);
+      }
+      // Unchanged photos keep their existing managed URI — no needless copy.
+      const photoUri = persistedPhotoUri ?? formPhotoUri;
+
+      if (formMode === 'create' || formMode === 'lost-create') {
+        const isLost = formMode === 'lost-create';
+        const loc = isLost && formLocUnknown ? '' : formLoc;
+        const create = isLost ? db.createLostItem : db.createItem;
+        let created: Item;
+        try {
+          created = await create({
+            name: formName, loc, note: formNote, photoUri, colorKey: formColorKey,
+          });
+        } catch (err) {
+          if (__DEV__) console.error('[saveForm] create failed', err);
+          await deleteManagedPhoto(persistedPhotoUri);
+          flash('Eşya kaydedilemedi.', 'Bilgilerin duruyor, tekrar deneyebilirsin.');
+          return;
         }
         await refreshItems();
         setFormOpen(false);
-        flash('Değişiklikleri kaydettim.', formName);
+        setScreen(isLost ? 'lost' : 'find');
+        if (!isLost) setQ('');
+        haptics.success();
+        if (isLost) flash('Kayıp olarak kaydettim.', created.name);
+        else flash('Kaydettim.', `${created.name} — ${created.loc}`);
+      } else if (formMode === 'edit' && formEditingId) {
+        const id = formEditingId;
+        const movedTo = formLoc.trim() && formLoc.trim() !== formOriginalLoc.trim()
+          ? formLoc
+          : undefined;
+        try {
+          await db.updateItemWithOptionalMove(
+            id,
+            { name: formName, note: formNote, photoUri, colorKey: formColorKey },
+            movedTo
+          );
+        } catch (err) {
+          if (__DEV__) console.error('[saveForm] update failed', err);
+          await deleteManagedPhoto(persistedPhotoUri);
+          flash('Değişiklikler kaydedilemedi.', 'Bilgilerin duruyor, tekrar deneyebilirsin.');
+          return;
+        }
+        // The row now points at the new photo, so the previous one is safe
+        // to drop.
+        if (photoChanged) await deleteManagedPhoto(formOriginalPhotoUri);
+        await refreshItems();
+        setFormOpen(false);
+        haptics.success();
+        flash('Değişiklikleri kaydettim.', formName.trim());
       }
     } finally {
       setFormSaving(false);
@@ -335,9 +389,18 @@ export function useDepoStore() {
 
   async function deleteItem() {
     if (!selId) return;
-    await db.deleteItemDb(selId);
+    let removed: { photoUri: string | null };
+    try {
+      removed = await db.deleteItemDb(selId);
+    } catch (err) {
+      if (__DEV__) console.error('[deleteItem] failed', err);
+      flash('Kayıt silinemedi.', 'Tekrar deneyebilirsin.');
+      return;
+    }
     setSelId(null);
     await refreshItems();
+    // Only now that the row is gone is the file genuinely unreferenced.
+    await deleteManagedPhoto(removed.photoUri);
     flash('Kayıt silindi.', 'Fotoğrafı da cihazdan kaldırıldı.');
   }
 
@@ -354,9 +417,17 @@ export function useDepoStore() {
   const deleteItemById = useCallback(async (id: string) => {
     const it = itemsRef.current.find((x) => x.id === id);
     if (!it) return;
-    await db.deleteItemDb(id);
+    let removed: { photoUri: string | null };
+    try {
+      removed = await db.deleteItemDb(id);
+    } catch (err) {
+      if (__DEV__) console.error('[deleteItemById] failed', err);
+      flash('Kayıt silinemedi.', 'Tekrar deneyebilirsin.');
+      return;
+    }
     if (selIdRef.current === id) setSelId(null);
     await refreshItems();
+    await deleteManagedPhoto(removed.photoUri);
     flash('Kayıt silindi.', `${it.name} — fotoğrafı da kaldırıldı.`);
   }, [refreshItems, flash]);
 
@@ -370,8 +441,10 @@ export function useDepoStore() {
     const entry = pendingDeletesRef.current.get(id);
     if (!entry) return;
     try {
-      await db.deleteItemDb(id);
+      const removed = await db.deleteItemDb(id);
       pendingDeletesRef.current.delete(id);
+      // The undo window closed without a rescue, so the photo is free to go.
+      await deleteManagedPhoto(removed.photoUri);
     } catch {
       pendingDeletesRef.current.delete(id);
       await refreshItems();
@@ -514,9 +587,17 @@ export function useDepoStore() {
     // later fires against an already-empty table (or resurrects a row).
     for (const entry of pendingDeletesRef.current.values()) clearTimeout(entry.timer);
     pendingDeletesRef.current.clear();
-    await db.deleteAllItems();
+    let removed: { photoUris: string[] };
+    try {
+      removed = await db.deleteAllItems();
+    } catch (err) {
+      if (__DEV__) console.error('[deleteAllData] failed', err);
+      flash('Veriler silinemedi.', 'Tekrar deneyebilirsin.');
+      return;
+    }
     setItems([]);
     setSelId(null);
+    for (const uri of removed.photoUris) await deleteManagedPhoto(uri);
     flash('Bütün veriler silindi.', 'Eşya kayıtları cihazdan kaldırıldı.');
   }
 
@@ -582,30 +663,33 @@ export function useDepoStore() {
     [items, now]
   );
 
-  // Real substitute for the prototype's 3 hardcoded location suggestions:
-  // most recently used distinct locations, falling back to sensible defaults
-  // when there isn't enough history yet.
-  const locSuggestions = useMemo(() => {
+  // Every distinct location the user has actually used, most recent first.
+  // Deduped on a normalized key so "Salon / Dolap" and " salon / dolap "
+  // don't both show up, while the nicely-cased original is what's displayed.
+  const recentLocations = useMemo(() => {
     const seen = new Set<string>();
-    const fromItems: string[] = [];
+    const out: string[] = [];
     for (const it of storedItems.slice().sort((a, b) => b.updatedAt - a.updatedAt)) {
-      if (!seen.has(it.loc)) {
-        seen.add(it.loc);
-        fromItems.push(it.loc);
-      }
-      if (fromItems.length >= 3) break;
+      if (!it.loc) continue;
+      const key = norm(it.loc);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(it.loc);
+      if (out.length >= MAX_LOCATION_SUGGESTIONS) break;
     }
-    if (fromItems.length >= 3) return fromItems;
-    const defaults = ['Yatak odası / Beyaz dolap / Üst çekmece', 'Yatak odası / Komodin / Alt çekmece', 'Salon / TV ünitesi / Sol dolap'];
-    for (const d of defaults) {
-      if (fromItems.length >= 3) break;
-      if (!seen.has(d)) {
-        seen.add(d);
-        fromItems.push(d);
-      }
-    }
-    return fromItems;
+    return out;
   }, [storedItems]);
+
+  // What the form actually shows: as the user types, the same list narrows to
+  // locations containing what they've written so far, so a long breadcrumb
+  // never has to be retyped in full.
+  const locSuggestions = useMemo(() => {
+    const typed = norm(formLoc);
+    if (!typed) return recentLocations;
+    const matches = recentLocations.filter((loc) => norm(loc).includes(typed));
+    // Hide a suggestion that is just what they already typed.
+    return matches.filter((loc) => norm(loc) !== typed);
+  }, [recentLocations, formLoc]);
 
   return {
     booting,
