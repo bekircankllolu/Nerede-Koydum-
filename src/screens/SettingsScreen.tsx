@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { colors, radii, spacing, surfaces, typography } from '../theme';
+import { colors, radii, spacing, surfaces, typography, FREE_ITEM_LIMIT } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { ChevronRight } from '../components/icons';
 
@@ -97,7 +97,9 @@ export default function SettingsScreen() {
       <Pressable style={styles.proCard} onPress={openPaywall}>
         <Text style={styles.proTitle}>{isPro ? 'Depo Pro · etkin' : 'Depo Pro’ya geç'}</Text>
         <Text style={styles.proSub}>
-          {isPro ? 'Sınırsız eşya, konum geçmişi ve dışa aktarma açık.' : 'Sınırsız eşya, aile paylaşımı, dışa aktarma. Tek seferlik ödeme.'}
+          {isPro
+            ? 'Sınırsız eşya ve CSV dışa aktarma açık.'
+            : `${FREE_ITEM_LIMIT} eşya sınırını kaldır ve verilerini dışa aktar. Tek seferlik ödeme.`}
         </Text>
       </Pressable>
 

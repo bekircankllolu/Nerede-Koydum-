@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
-import { colors, motion, radii, spacing, surfaces, typography } from '../theme';
+import { colors, controls, motion, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, SecondaryButton } from '../components/common';
 import { PhotoIcon, StarIcon } from '../components/icons';
@@ -69,7 +69,7 @@ export default function DetailScreen() {
           />
         ) : (
           <View style={styles.photoPlaceholder}>
-            <PhotoIcon />
+            <PhotoIcon size={22} />
             <Text style={styles.photoPlaceholderText}>
               {d.item.photoUri ? 'Fotoğraf kullanılamıyor' : 'Fotoğraf eklenmedi'}
             </Text>
@@ -101,7 +101,7 @@ export default function DetailScreen() {
             <Text style={styles.lostLine}>{d.lostDaysLabel}</Text>
           ) : (
             <Text style={d.stale ? styles.confirmedStale : styles.confirmed}>
-              {d.stale ? `${d.confirmed} Hâlâ orada mı?` : d.confirmed}
+              {d.stale ? `${d.confirmed.replace(/\.$/, '')} · Hâlâ burada mı?` : d.confirmed}
             </Text>
           )}
           {!d.isLost ? (
@@ -111,6 +111,7 @@ export default function DetailScreen() {
                 label="Konumu doğrula"
                 onPress={confirmLoc}
                 style={d.stale ? styles.confirmBtnStale : styles.confirmBtn}
+                textColor={d.stale ? '#fff' : undefined}
               />
             </View>
           ) : null}
@@ -166,11 +167,14 @@ const styles = StyleSheet.create({
   back: { ...typography.body, color: colors.indigo, fontWeight: '500' },
   edit: { ...typography.bodyStrong, color: colors.indigo },
   content: { paddingHorizontal: spacing.xl, paddingBottom: 40 },
-  photo: { borderRadius: radii.lg, height: 190, backgroundColor: colors.photoPlaceholderBg },
+  photo: { borderRadius: radii.lg, height: 210, backgroundColor: colors.photoPlaceholderBg },
+  // Deliberately much shorter than the real photo: the location card is the
+  // answer the user came for, so it should not be pushed down by an empty
+  // frame.
   photoPlaceholder: {
-    borderRadius: radii.lg, height: 190, backgroundColor: colors.photoPlaceholderBg,
+    borderRadius: radii.lg, height: 110, backgroundColor: colors.photoPlaceholderBg,
     borderWidth: 1, borderStyle: 'dashed', borderColor: colors.photoPlaceholderBorder,
-    alignItems: 'center', justifyContent: 'center', gap: 8,
+    alignItems: 'center', justifyContent: 'center', gap: spacing.xs + 2,
   },
   photoPlaceholderText: { ...typography.caption, color: colors.textWarm2 },
   nameRow: {
@@ -178,7 +182,10 @@ const styles = StyleSheet.create({
     marginVertical: spacing.lg, gap: spacing.sm + 2,
   },
   name: { flex: 1, ...typography.title1, fontSize: 28, lineHeight: 34, color: colors.textPrimary },
-  favBtn: { padding: 2 },
+  favBtn: {
+    width: controls.iconButton, height: controls.iconButton,
+    alignItems: 'center', justifyContent: 'center',
+  },
   // The one real hero surface on this screen — this is the answer the user
   // opened the app for, so it keeps its elevation.
   locCard: { ...surfaces.hero, padding: spacing.xxl - 2, gap: spacing.md + 2 },
@@ -213,14 +220,14 @@ const styles = StyleSheet.create({
   },
   historyCard: { ...surfaces.card, marginTop: spacing.sm + 2, overflow: 'hidden' },
   historyRow: {
-    paddingVertical: spacing.md + 2, paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.lg,
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
-  dot: { width: 8, height: 8, borderRadius: 99 },
+  dot: { width: 6, height: 6, borderRadius: 99 },
   historyWhere: { flex: 1, ...typography.callout, color: colors.textPrimary },
   historyEmpty: { ...typography.callout, color: colors.textTertiary },
-  historyWhen: { ...typography.footnote, color: colors.textTertiary },
+  historyWhen: { ...typography.caption, color: colors.textTertiary },
   deleteBtn: {
     marginTop: spacing.xxl + 2, alignSelf: 'center',
     paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.md,

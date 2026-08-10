@@ -28,28 +28,44 @@ export function IconButton({
 
 export function PrimaryButton({
   label, onPress, bg = colors.indigo, disabled, style, textColor = '#fff',
+  loading, accessibilityLabel,
 }: {
-  label: string; onPress: () => void; bg?: string; disabled?: boolean; style?: ViewStyle; textColor?: string;
+  label: string; onPress: () => void; bg?: string; disabled?: boolean; style?: ViewStyle;
+  textColor?: string; loading?: boolean; accessibilityLabel?: string;
 }) {
+  const blocked = disabled || loading;
   return (
     <Pressable
-      onPress={disabled ? undefined : onPress}
+      onPress={blocked ? undefined : onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: !!blocked, busy: !!loading }}
       style={({ pressed }) => [
         styles.primaryBtn,
-        { backgroundColor: bg, opacity: pressed && !disabled ? 0.9 : 1 },
-        pressed && !disabled && styles.pressedScale,
+        { backgroundColor: bg, opacity: pressed && !blocked ? 0.9 : 1 },
+        pressed && !blocked && styles.pressedScale,
         style,
       ]}
     >
-      <Text style={[styles.primaryBtnText, { color: textColor }]}>{label}</Text>
+      {/* The spinner sits beside a fixed label rather than replacing it, so
+          the button never changes width mid-save. */}
+      {loading ? <ActivityIndicator color={textColor} style={styles.btnSpinner} /> : null}
+      <Text style={[styles.primaryBtnText, { color: textColor }]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
 
-export function SecondaryButton({ label, onPress, style }: { label: string; onPress: () => void; style?: ViewStyle }) {
+export function SecondaryButton({
+  label, onPress, style, textColor, accessibilityLabel,
+}: {
+  label: string; onPress: () => void; style?: ViewStyle;
+  textColor?: string; accessibilityLabel?: string;
+}) {
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
       style={({ pressed }) => [
         styles.secondaryBtn,
         pressed && styles.secondaryBtnPressed,
@@ -57,7 +73,14 @@ export function SecondaryButton({ label, onPress, style }: { label: string; onPr
         style,
       ]}
     >
-      <Text style={styles.secondaryBtnText}>{label}</Text>
+      {/* textColor exists so callers that override the background (e.g. the
+          emphasised stale-confirm action) can keep the label readable. */}
+      <Text
+        style={[styles.secondaryBtnText, textColor ? { color: textColor } : null]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -91,8 +114,9 @@ export function Spinner() {
 const styles = StyleSheet.create({
   primaryBtn: {
     height: controls.primaryHeight, borderRadius: radii.md,
-    alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
   },
+  btnSpinner: { marginRight: 8 },
   primaryBtnText: { ...typography.headline },
   secondaryBtn: {
     height: controls.secondaryHeight, borderRadius: radii.md,

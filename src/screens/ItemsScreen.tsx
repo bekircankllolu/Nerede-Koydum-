@@ -7,7 +7,7 @@ import { haptics } from '../lib/haptics';
 import ItemRow from '../components/ItemRow';
 import EmptyState from '../components/EmptyState';
 import { IconButton } from '../components/common';
-import { PlusIcon, CloseIcon } from '../components/icons';
+import { PlusIcon, CloseIcon, TabItemsIcon } from '../components/icons';
 
 export default function ItemsScreen() {
   const {
@@ -15,7 +15,11 @@ export default function ItemsScreen() {
     openItem, toggleFavById, deleteItemById, deleteItemByIdWithUndo, openAddForm,
     selectedLoc, locationOptions, locFilterOpen, openLocFilterSheet, closeLocFilterSheet, chooseLocFilter,
   } = useDepo();
-  const countLabel = `${storedItems.length} eşya${isPro ? '' : ` · ücretsiz sınır ${FREE_ITEM_LIMIT}`}`;
+  // Free users get the limit inline rather than as a trailing sentence:
+  // "8 / 20 eşya" reads in a glance where the old copy did not.
+  const countLabel = isPro
+    ? `${storedItems.length} eşya`
+    : `${storedItems.length} / ${FREE_ITEM_LIMIT} eşya`;
 
   const onChipPress = (key: FilterKey) => {
     haptics.light();
@@ -62,6 +66,7 @@ export default function ItemsScreen() {
 
       {storedItems.length === 0 ? (
         <EmptyState
+          icon={<TabItemsIcon size={26} color={colors.indigo} />}
           title="Henüz eşya eklemedin."
           body="İlk eşyanı kaydet, sonra aramak zorunda kalma."
           ctaLabel="İlk eşyamı ekle"
