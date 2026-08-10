@@ -10,23 +10,31 @@ import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, MicButton } from '../components/common';
 import ColorPicker from '../components/ColorPicker';
 import { PhotoIcon } from '../components/icons';
+import { haptics } from '../lib/haptics';
 
 const AnimatedSafeArea = Animated.createAnimatedComponent(SafeAreaView);
 
-async function takePhoto(): Promise<string | null> {
+// Cancelling is a normal outcome and must stay silent; a denied permission
+// is the only case worth telling the user about.
+type PhotoPick =
+  | { status: 'picked'; uri: string }
+  | { status: 'canceled' }
+  | { status: 'denied' };
+
+async function takePhoto(): Promise<PhotoPick> {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
-  if (!perm.granted) return null;
+  if (!perm.granted) return { status: 'denied' };
   const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7, allowsEditing: true, aspect: [4, 3] });
-  if (result.canceled || !result.assets?.length) return null;
-  return result.assets[0].uri;
+  if (result.canceled || !result.assets?.length) return { status: 'canceled' };
+  return { status: 'picked', uri: result.assets[0].uri };
 }
 
-async function pickFromGallery(): Promise<string | null> {
+async function pickFromGallery(): Promise<PhotoPick> {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
+  if (!perm.granted) return { status: 'denied' };
   const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7, allowsEditing: true, aspect: [4, 3] });
-  if (result.canceled || !result.assets?.length) return null;
-  return result.assets[0].uri;
+  if (result.canceled || !result.assets?.length) return { status: 'canceled' };
+  return { status: 'picked', uri: result.assets[0].uri };
 }
 
 const COPY = {
@@ -39,7 +47,7 @@ export default function ItemFormScreen() {
   const {
     closeForm, formMode, formName, setFormName, formLoc, setFormLoc, formLocUnknown, setFormLocUnknown,
     formNote, setFormNote, formNoteOpen, setFormNoteOpen, formPhotoUri, setFormPhotoUri,
-    formColorKey, setFormColorKey, formValid, formSaving, locSuggestions, startVoice, saveForm,
+    formColorKey, setFormColorKey, formValid, formSaving, locSuggestions, startVoice, saveForm, flash,
   } = useDepo();
 
   const reduced = useReducedMotion();
@@ -52,13 +60,22 @@ export default function ItemFormScreen() {
   const isLostCreate = formMode === 'lost-create';
   const locRef = useRef<TextInput>(null);
 
+  const choosePhoto = async (pick: () => Promise<PhotoPick>, what: string) => {
+    const result = await pick();
+    if (result.status === 'picked') setFormPhotoUri(result.uri);
+    else if (result.status === 'denied') {
+      flash('İzin gerekli.', `Ayarlar'dan ${what} erişimine izin verebilirsin.`);
+    }
+    // 'canceled' is deliberately silent.
+  };
+
   return (
     <AnimatedSafeArea style={styles.root} edges={['top', 'bottom']} entering={entering}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>{copy.header}</Text>
-          <Pressable onPress={closeForm} hitSlop={8}>
-            <Text style={styles.cancel}>Vazgeç</Text>
+          <Pressable onPress={closeForm} hitSlop={8} disabled={formSaving}>
+            <Text style={[styles.cancel, formSaving && styles.cancelDisabled]}>Vazgeç</Text>
           </Pressable>
         </View>
 
@@ -74,16 +91,20 @@ export default function ItemFormScreen() {
             <View style={styles.photoBox}>
               <PhotoIcon size={30} />
               <View style={styles.photoActions}>
-                <Pressable style={styles.photoActionBtn} onPress={async () => {
-                  const uri = await takePhoto();
-                  if (uri) setFormPhotoUri(uri);
-                }}>
+                <Pressable
+                  style={({ pressed }) => [styles.photoActionBtn, pressed && styles.pressed]}
+                  onPress={() => choosePhoto(takePhoto, 'kamera')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Fotoğraf çek"
+                >
                   <Text style={styles.photoActionText}>Fotoğraf çek</Text>
                 </Pressable>
-                <Pressable style={styles.photoActionBtn} onPress={async () => {
-                  const uri = await pickFromGallery();
-                  if (uri) setFormPhotoUri(uri);
-                }}>
+                <Pressable
+                  style={({ pressed }) => [styles.photoActionBtn, pressed && styles.pressed]}
+                  onPress={() => choosePhoto(pickFromGallery, 'fotoğraflar')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Galeriden seç"
+                >
                   <Text style={styles.photoActionText}>Galeriden seç</Text>
                 </Pressable>
               </View>
@@ -123,8 +144,9 @@ export default function ItemFormScreen() {
                     onChangeText={setFormLoc}
                     placeholder="Yatak odası, beyaz dolap, üst çekmece"
                     placeholderTextColor={colors.textSecondary}
-                    style={[styles.fieldInput, { fontSize: 16 }]}
+                    style={styles.fieldInputLoc}
                     returnKeyType="done"
+                    onSubmitEditing={() => { if (formValid && !formSaving) saveForm(); }}
                   />
                 </View>
                 <MicButton small size={52} onPress={() => startVoice('loc')} />
@@ -144,8 +166,14 @@ export default function ItemFormScreen() {
             {!isLostCreate || !formLocUnknown ? (
               <View style={{ gap: 7, marginTop: 4 }}>
                 {locSuggestions.map((s) => (
-                  <Pressable key={s} style={styles.suggestion} onPress={() => setFormLoc(s)}>
-                    <Text style={styles.suggestionText}>{s}</Text>
+                  <Pressable
+                    key={s}
+                    style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}
+                    onPress={() => { haptics.light(); setFormLoc(s); }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Konumu kullan: ${s}`}
+                  >
+                    <Text style={styles.suggestionText} numberOfLines={2}>{s}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -197,6 +225,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontWeight: '600', fontSize: 18, color: colors.textPrimary },
   cancel: { color: colors.indigo, fontWeight: '500', fontSize: 16 },
+  cancelDisabled: { opacity: 0.4 },
   content: { paddingHorizontal: 20, paddingBottom: 20 },
   photoBox: {
     borderRadius: radii.lg, backgroundColor: colors.photoPlaceholderBg, aspectRatio: 4 / 3,
@@ -220,6 +249,8 @@ const styles = StyleSheet.create({
     flex: 1, height: 56, justifyContent: 'center', paddingHorizontal: 16,
   },
   fieldInput: { fontSize: 17, color: colors.textPrimary, padding: 0 },
+  fieldInputLoc: { fontSize: 16, color: colors.textPrimary, padding: 0 },
+  pressed: { opacity: 0.85 },
   unknownLocBox: {
     height: 56, borderRadius: radii.md, backgroundColor: colors.neutralChip, justifyContent: 'center', paddingHorizontal: 16,
   },

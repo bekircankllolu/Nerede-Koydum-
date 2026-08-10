@@ -277,6 +277,39 @@ export async function updateItemDetails(id: string, input: UpdateItemDetailsInpu
   );
 }
 
+/**
+ * Saving an edit can touch details and the location at once. Doing that as
+ * two separate awaits could leave the row renamed but not moved if the
+ * second call failed, so both go in one transaction.
+ * `newLoc` omitted/unchanged means details-only: the location timeline is
+ * left alone, because it records "confirmed here at", not "row edited at".
+ */
+export async function updateItemWithOptionalMove(
+  id: string,
+  input: UpdateItemDetailsInput,
+  newLoc?: string
+): Promise<void> {
+  const db = await getDb();
+  const now = Date.now();
+  const loc = newLoc && newLoc.trim()
+    ? (normalizeLocInput(newLoc) || newLoc.trim())
+    : null;
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'UPDATE items SET name = ?, note = ?, photo_uri = ?, color_key = ? WHERE id = ?',
+      input.name.trim(), input.note.trim(), input.photoUri, input.colorKey, id
+    );
+    if (loc) {
+      await db.runAsync('UPDATE items SET loc = ?, updated_at = ? WHERE id = ?', loc, now, id);
+      await db.runAsync(
+        'INSERT INTO item_history (item_id, where_text, at) VALUES (?, ?, ?)',
+        id, lastSegment(loc), now
+      );
+    }
+  });
+}
+
 export async function markItemLost(id: string): Promise<number> {
   const db = await getDb();
   const now = Date.now();
@@ -300,18 +333,31 @@ export async function markItemFound(id: string, newLoc?: string): Promise<{ loc:
   return { loc: null };
 }
 
-export async function deleteItemDb(id: string): Promise<void> {
+/**
+ * Deletes the row and returns the photo it referenced, so the caller can
+ * clean the file up *after* the DB delete actually succeeded.
+ */
+export async function deleteItemDb(id: string): Promise<{ photoUri: string | null }> {
   const db = await getDb();
+  const row = await db.getFirstAsync<{ photo_uri: string | null }>(
+    'SELECT photo_uri FROM items WHERE id = ?', id
+  );
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM item_history WHERE item_id = ?', id);
     await db.runAsync('DELETE FROM items WHERE id = ?', id);
   });
+  return { photoUri: row?.photo_uri ?? null };
 }
 
-export async function deleteAllItems(): Promise<void> {
+/** Same contract as deleteItemDb: returns every photo that is now unreferenced. */
+export async function deleteAllItems(): Promise<{ photoUris: string[] }> {
   const db = await getDb();
+  const rows = await db.getAllAsync<{ photo_uri: string | null }>(
+    'SELECT photo_uri FROM items WHERE photo_uri IS NOT NULL'
+  );
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM item_history');
     await db.runAsync('DELETE FROM items');
   });
+  return { photoUris: rows.map((r) => r.photo_uri).filter((u): u is string => !!u) };
 }

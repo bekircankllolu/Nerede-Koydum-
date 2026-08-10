@@ -29,17 +29,89 @@ export function clean(s: string | null | undefined): string {
   return words.join(' ');
 }
 
+// Bounded edit distance: gives up as soon as the distance exceeds `max`, so
+// a typo like "pasaprot" still finds "pasaport" without letting genuinely
+// unrelated words score at all.
+function withinEditDistance(a: string, b: string, max: number): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > max) return false;
+  let prev = new Array(b.length + 1);
+  let curr = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    let rowMin = curr[0];
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+      if (curr[j] < rowMin) rowMin = curr[j];
+    }
+    if (rowMin > max) return false;
+    const tmp = prev; prev = curr; curr = tmp;
+  }
+  return prev[b.length] <= max;
+}
+
+/** How much of a typo we forgive, scaled to word length. */
+function typoBudget(word: string): number {
+  if (word.length >= 7) return 2;
+  if (word.length >= 4) return 1;
+  return 0;
+}
+
+function fuzzyHit(token: string, haystackWords: string[]): boolean {
+  const budget = typoBudget(token);
+  if (!budget) return false;
+  return haystackWords.some((w) => withinEditDistance(token, w, budget));
+}
+
+/**
+ * Scores one item against a cleaned query.
+ *
+ * The name is always the strongest signal — an item called "Pasaport" must
+ * outrank one that merely lives in a drawer whose name mentions it. Multi-word
+ * queries are scored per token and every token has to land somewhere, so
+ * "yedek anahtar" doesn't match an item that only satisfies "anahtar".
+ */
 export function score(it: Item, q: string, daysSince: (it: Item) => number): number {
   const n = norm(it.name);
   const loc = norm(it.loc);
   const note = norm(it.note);
+
+  // Whole-query matches on the name are the highest-confidence signals.
   let s = 0;
   if (n === q) s = 100;
-  else if (n.indexOf(q) === 0) s = 85;
-  else if (n.indexOf(q) > -1) s = 70;
-  else if (q.length > 3 && n.indexOf(q.slice(0, q.length - 1)) > -1) s = 55;
-  if (!s && note.indexOf(q) > -1) s = 40;
-  if (!s && loc.indexOf(q) > -1) s = 35;
+  else if (n.indexOf(q) === 0) s = 88;
+  else if (n.indexOf(q) > -1) s = 76;
+
+  if (!s) {
+    const tokens = q.split(' ').filter(Boolean);
+    const nameWords = n.split(' ').filter(Boolean);
+    const locWords = loc.split(' ').filter(Boolean);
+    const noteWords = note.split(' ').filter(Boolean);
+
+    let total = 0;
+    for (const t of tokens) {
+      // Best available evidence for this token, name first.
+      let best = 0;
+      if (nameWords.some((w) => w === t)) best = 70;
+      else if (nameWords.some((w) => w.startsWith(t))) best = 62;
+      else if (n.indexOf(t) > -1) best = 54;
+      else if (fuzzyHit(t, nameWords)) best = 46;
+      else if (locWords.some((w) => w === t)) best = 34;
+      else if (loc.indexOf(t) > -1) best = 30;
+      else if (noteWords.some((w) => w === t)) best = 26;
+      else if (note.indexOf(t) > -1) best = 22;
+      else if (fuzzyHit(t, locWords) || fuzzyHit(t, noteWords)) best = 16;
+
+      // A single unmatched token disqualifies the item — this is what keeps
+      // unrelated rows from floating up on multi-word queries.
+      if (!best) return 0;
+      total += best;
+    }
+    s = total / tokens.length;
+  }
+
   if (s && daysSince(it) < 7) s += 5;
   return s;
 }
