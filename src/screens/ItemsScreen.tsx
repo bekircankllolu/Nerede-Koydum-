@@ -1,27 +1,24 @@
-import React from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
-import { colors, radii, FREE_ITEM_LIMIT } from '../theme';
+import React, { useCallback } from 'react';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, type ListRenderItem } from 'react-native';
+import { colors, radii, spacing, typography, FREE_ITEM_LIMIT } from '../theme';
 import { useDepo, type FilterKey } from '../state/DepoContext';
+import type { Item } from '../db';
+import { haptics } from '../lib/haptics';
 import ItemRow from '../components/ItemRow';
 import EmptyState from '../components/EmptyState';
 import { IconButton } from '../components/common';
 import { PlusIcon, CloseIcon } from '../components/icons';
 
-function lightHaptic() {
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-}
-
 export default function ItemsScreen() {
   const {
     storedItems, listed, filter, setFilter, filterDefs, card, isPro, accent,
-    toggleFavById, deleteItemById, deleteItemByIdWithUndo, openAddForm,
+    openItem, toggleFavById, deleteItemById, deleteItemByIdWithUndo, openAddForm,
     selectedLoc, locationOptions, locFilterOpen, openLocFilterSheet, closeLocFilterSheet, chooseLocFilter,
   } = useDepo();
   const countLabel = `${storedItems.length} eşya${isPro ? '' : ` · ücretsiz sınır ${FREE_ITEM_LIMIT}`}`;
 
   const onChipPress = (key: FilterKey) => {
-    lightHaptic();
+    haptics.light();
     if (key === 'loc') {
       openLocFilterSheet();
       return;
@@ -29,10 +26,32 @@ export default function ItemsScreen() {
     setFilter(key);
   };
 
+  const keyExtractor = useCallback((it: Item) => it.id, []);
+
+  const renderItem = useCallback<ListRenderItem<Item>>(({ item }) => {
+    const c = card(item);
+    return (
+      <ItemRow
+        id={item.id}
+        initial={c.initial}
+        name={c.name}
+        subtitle={c.fullLoc}
+        onPress={openItem}
+        showFavMark={c.fav}
+        showChevron
+        colorKey={c.colorKey}
+        isFav={c.fav}
+        onToggleFav={toggleFavById}
+        onDeleteConfirm={deleteItemById}
+        onFullSwipeDelete={deleteItemByIdWithUndo}
+      />
+    );
+  }, [card, openItem, toggleFavById, deleteItemById, deleteItemByIdWithUndo]);
+
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <View style={{ flex: 1 }}>
+        <View style={styles.headerText}>
           <Text style={styles.title}>Eşyalar</Text>
           <Text style={styles.count}>{countLabel}</Text>
         </View>
@@ -65,7 +84,10 @@ export default function ItemsScreen() {
                 <Pressable
                   key={f.key}
                   onPress={() => onChipPress(f.key)}
-                  style={[styles.chip, { backgroundColor: on ? accent : colors.neutralChip }]}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    { backgroundColor: on ? accent : colors.neutralChip, opacity: pressed ? 0.85 : 1 },
+                  ]}
                 >
                   <Text style={[styles.chipText, { color: on ? '#fff' : colors.neutralChipText }]} numberOfLines={1}>
                     {label}
@@ -75,31 +97,23 @@ export default function ItemsScreen() {
             })}
           </ScrollView>
 
-          <ScrollView contentContainerStyle={styles.list}>
-            {listed.map((it) => {
-              const c = card(it);
-              return (
-                <ItemRow
-                  key={it.id}
-                  initial={c.initial}
-                  name={c.name}
-                  subtitle={c.fullLoc}
-                  onPress={c.open}
-                  favMark={c.favMark}
-                  showChevron
-                  colorKey={c.colorKey}
-                  isFav={it.fav}
-                  onToggleFav={() => toggleFavById(it.id)}
-                  onDeleteConfirm={() => deleteItemById(it.id)}
-                  onFullSwipeDelete={() => deleteItemByIdWithUndo(it.id)}
-                />
-              );
-            })}
-
-            {listed.length === 0 ? (
-              <Text style={styles.empty}>Bu filtrede kayıt yok.</Text>
-            ) : null}
-          </ScrollView>
+          {/* removeClippedSubviews stays off: a swiped row translates beyond
+              its own bounds, and clipping would cut the action capsule. */}
+          <FlatList
+            data={listed}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews={false}
+            initialNumToRender={12}
+            maxToRenderPerBatch={10}
+            windowSize={7}
+            updateCellsBatchingPeriod={50}
+            keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={<Text style={styles.empty}>Bu filtrede kayıt yok.</Text>}
+          />
         </>
       )}
 
@@ -112,7 +126,7 @@ export default function ItemsScreen() {
                 <CloseIcon />
               </Pressable>
             </View>
-            <ScrollView style={{ maxHeight: 360 }}>
+            <ScrollView style={styles.sheetScroll}>
               {locationOptions.length === 0 ? (
                 <Text style={styles.sheetEmpty}>Henüz konum bilgisi yok.</Text>
               ) : (
@@ -120,12 +134,12 @@ export default function ItemsScreen() {
                   <Pressable
                     key={loc}
                     onPress={() => {
-                      lightHaptic();
+                      haptics.light();
                       chooseLocFilter(loc);
                     }}
-                    style={({ pressed }) => [styles.sheetRow, pressed && { backgroundColor: colors.hairline }]}
+                    style={({ pressed }) => [styles.sheetRow, pressed && styles.sheetRowPressed]}
                   >
-                    <Text style={[styles.sheetRowText, selectedLoc === loc && { color: colors.indigo, fontWeight: '700' }]}>
+                    <Text style={[styles.sheetRowText, selectedLoc === loc && styles.sheetRowTextOn]}>
                       {loc}
                     </Text>
                   </Pressable>
@@ -140,27 +154,38 @@ export default function ItemsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, paddingHorizontal: 20 },
-  header: { paddingTop: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  title: { fontWeight: '700', fontSize: 30, letterSpacing: -0.7, color: colors.textPrimary, marginBottom: 4 },
-  count: { fontSize: 14, color: colors.textSecondary },
-  filterScroll: { flexGrow: 0, flexShrink: 0, marginTop: 16 },
-  filterRow: { gap: 8, alignItems: 'center', paddingVertical: 2 },
+  root: { flex: 1, paddingHorizontal: spacing.xl },
+  header: { paddingTop: spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  headerText: { flex: 1 },
+  title: { ...typography.largeTitle, color: colors.textPrimary, marginBottom: spacing.xs },
+  count: { ...typography.subheadline, color: colors.textSecondary },
+  filterScroll: { flexGrow: 0, flexShrink: 0, marginTop: spacing.lg },
+  filterRow: { gap: spacing.sm, alignItems: 'center', paddingVertical: 2 },
   chip: {
-    height: 34, paddingHorizontal: 14, borderRadius: radii.pill,
+    height: 34, paddingHorizontal: spacing.lg - 2, borderRadius: radii.pill,
     alignItems: 'center', justifyContent: 'center',
   },
-  chipText: { fontWeight: '600', fontSize: 13.5 },
-  list: { marginTop: 14, gap: 10, paddingBottom: 100 },
-  empty: { marginTop: 24, textAlign: 'center', fontSize: 14, color: colors.textTertiary },
+  chipText: { ...typography.caption, fontSize: 13.5, lineHeight: 18 },
+  list: { flex: 1, marginTop: spacing.md },
+  listContent: { gap: spacing.sm + 2, paddingTop: 2, paddingBottom: 100 },
+  empty: { marginTop: spacing.xxl, textAlign: 'center', ...typography.subheadline, color: colors.textTertiary },
   sheetScrim: { flex: 1, backgroundColor: colors.sheetScrim, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.appBg, borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 32, maxHeight: '70%',
+    paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xxxl, maxHeight: '70%',
   },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  sheetTitle: { fontWeight: '700', fontSize: 18, color: colors.textPrimary },
-  sheetEmpty: { fontSize: 14, color: colors.textTertiary, paddingVertical: 16 },
-  sheetRow: { paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
-  sheetRowText: { fontSize: 16, color: colors.textPrimary },
+  sheetScroll: { maxHeight: 360 },
+  sheetHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md,
+  },
+  sheetTitle: { ...typography.title3, color: colors.textPrimary },
+  sheetEmpty: { ...typography.subheadline, color: colors.textTertiary, paddingVertical: spacing.lg },
+  sheetRow: {
+    paddingVertical: spacing.md + 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.hairline,
+  },
+  sheetRowPressed: { backgroundColor: colors.hairline },
+  sheetRowText: { ...typography.body, color: colors.textPrimary },
+  sheetRowTextOn: { color: colors.indigo, fontWeight: '700' },
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors, radii } from '../theme';
+import { colors, controls, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { daysBetween } from '../lib/search';
 import { PrimaryButton, MicButton } from '../components/common';
@@ -11,7 +11,7 @@ import { CloseIcon, PlusIcon, SearchIcon } from '../components/icons';
 export default function FindScreen() {
   const {
     q, setQ, results, card, startVoice, recent, goItems, openAddForm, openLostForm, createFromQuery,
-    toggleFavById, deleteItemById, deleteItemByIdWithUndo,
+    toggleFavById, deleteItemById, deleteItemByIdWithUndo, openItem,
   } = useDepo();
 
   const now = Date.now();
@@ -78,10 +78,11 @@ export default function FindScreen() {
                 return (
                   <ItemRow
                     key={it.id}
+                    id={it.id}
                     initial={c.initial}
                     name={c.name}
                     subtitle={c.shortLoc}
-                    onPress={c.open}
+                    onPress={openItem}
                     avatarSize={44}
                     showChevron
                     colorKey={c.colorKey}
@@ -110,7 +111,10 @@ export default function FindScreen() {
           <View style={styles.quickAdd}>
             <Text style={styles.quickAddTitle}>Bir şeyi yerine mi koydun?</Text>
             <Text style={styles.quickAddBody}>Şimdi kaydet, sonra arama.</Text>
-            <Pressable style={styles.quickAddBtn} onPress={openAddForm}>
+            <Pressable
+              style={({ pressed }) => [styles.quickAddBtn, pressed && styles.pressed]}
+              onPress={openAddForm}
+            >
               <PlusIcon />
               <Text style={styles.quickAddBtnText}>Yeni eşya ekle</Text>
             </Pressable>
@@ -132,17 +136,19 @@ export default function FindScreen() {
               return (
                 <ItemRow
                   key={it.id}
+                  id={it.id}
                   initial={c.initial}
                   name={c.name}
                   subtitle={c.shortLoc}
-                  onPress={c.open}
+                  onPress={openItem}
                   rightLabel={c.ago}
+                  showFavMark={c.fav}
                   colorKey={c.colorKey}
                   lost={c.lost}
-                  isFav={it.fav}
-                  onToggleFav={() => toggleFavById(it.id)}
-                  onDeleteConfirm={() => deleteItemById(it.id)}
-                  onFullSwipeDelete={() => deleteItemByIdWithUndo(it.id)}
+                  isFav={c.fav}
+                  onToggleFav={toggleFavById}
+                  onDeleteConfirm={deleteItemById}
+                  onFullSwipeDelete={deleteItemByIdWithUndo}
                 />
               );
             })}
@@ -155,50 +161,58 @@ export default function FindScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 },
-  title: { fontWeight: '700', fontSize: 30, letterSpacing: -0.7, color: colors.textPrimary, marginBottom: 18 },
-  searchRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  pressed: { opacity: 0.9 },
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 100 },
+  title: { ...typography.largeTitle, color: colors.textPrimary, marginBottom: spacing.lg + 2 },
+  searchRow: { flexDirection: 'row', gap: spacing.sm + 2, alignItems: 'center' },
+  // The search row is the primary interaction on the app's home screen, so
+  // this is one of the few surfaces that earns real elevation.
   searchBox: {
-    flex: 1, height: 56, borderRadius: radii.md, backgroundColor: colors.card,
-    flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+    ...surfaces.raised,
+    flex: 1, height: controls.fieldHeight,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2, paddingHorizontal: spacing.lg,
   },
-  searchInput: { flex: 1, fontSize: 17, color: colors.textPrimary, padding: 0 },
-  bestCard: {
-    borderRadius: radii.xl, backgroundColor: colors.card, padding: 22, gap: 16,
-    shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 14, shadowOffset: { width: 0, height: 2 },
-  },
+  searchInput: { flex: 1, ...typography.headline, fontWeight: '400', color: colors.textPrimary, padding: 0 },
+  bestCard: { ...surfaces.hero, padding: spacing.xxl - 2, gap: spacing.lg },
   bestLabelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bestLabel: { fontWeight: '600', fontSize: 12, color: colors.accent, letterSpacing: 0.6, textTransform: 'uppercase' },
-  bestName: { fontWeight: '700', fontSize: 24, letterSpacing: -0.4, color: colors.textPrimary },
-  bestSubLabel: { fontWeight: '600', fontSize: 11.5, color: colors.textSecondary, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: -10 },
-  bestLine: { fontWeight: '600', fontSize: 20, lineHeight: 27, color: colors.textPrimary },
-  bestConfirmed: { fontSize: 13, color: colors.textSecondary },
-  bestLostLine: { fontSize: 13, color: colors.lost, fontWeight: '600' },
-  sectionLabel: { fontWeight: '600', fontSize: 13, color: colors.textSecondary, paddingLeft: 4 },
+  bestLabel: { ...typography.overline, color: colors.accent, textTransform: 'uppercase' },
+  bestName: { ...typography.title1, fontSize: 24, lineHeight: 30, color: colors.textPrimary },
+  bestSubLabel: { ...typography.overline, color: colors.textSecondary, textTransform: 'uppercase', marginTop: -10 },
+  bestLine: { ...typography.title3, fontSize: 20, lineHeight: 26, color: colors.textPrimary },
+  bestConfirmed: { ...typography.footnote, color: colors.textSecondary },
+  bestLostLine: { ...typography.footnote, color: colors.lost, fontWeight: '600' },
+  sectionLabel: { ...typography.footnote, fontWeight: '600', color: colors.textSecondary, paddingLeft: spacing.xs },
   noResultsCard: {
-    borderRadius: radii.xl, backgroundColor: colors.card, padding: 22, paddingVertical: 26, gap: 14,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 3, shadowOffset: { width: 0, height: 1 },
+    ...surfaces.card, borderRadius: radii.xl,
+    padding: spacing.xxl - 2, paddingVertical: spacing.xxl + 2, gap: spacing.md + 2,
   },
-  noResultsTitle: { fontWeight: '600', fontSize: 19, color: colors.textPrimary },
-  noResultsBody: { fontSize: 15, color: colors.textSecondary },
+  noResultsTitle: { ...typography.title3, color: colors.textPrimary },
+  noResultsBody: { ...typography.callout, fontWeight: '400', color: colors.textSecondary },
   noResultsCta: {
-    height: 52, borderRadius: radii.md, backgroundColor: colors.indigoLight,
+    height: controls.secondaryHeight, borderRadius: radii.md, backgroundColor: colors.indigoLight,
     alignItems: 'center', justifyContent: 'center',
   },
-  noResultsCtaText: { color: colors.indigo, fontWeight: '600', fontSize: 16 },
-  noResultsLostCta: { alignSelf: 'center', paddingVertical: 4 },
-  noResultsLostCtaText: { color: colors.lost, fontWeight: '500', fontSize: 13.5 },
-  quickAdd: { marginTop: 20, borderRadius: radii.xl, backgroundColor: colors.indigoLight, padding: 22, gap: 6 },
-  quickAddTitle: { fontWeight: '600', fontSize: 19, color: colors.textPrimary },
-  quickAddBody: { fontSize: 15, color: colors.indigo },
-  quickAddBtn: {
-    marginTop: 14, height: 52, borderRadius: radii.md, backgroundColor: colors.indigo,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  noResultsCtaText: { ...typography.bodyStrong, color: colors.indigo },
+  noResultsLostCta: { alignSelf: 'center', paddingVertical: spacing.xs },
+  noResultsLostCtaText: { ...typography.footnote, color: colors.lost, fontWeight: '500' },
+  quickAdd: {
+    marginTop: spacing.xl, borderRadius: radii.xl, backgroundColor: colors.indigoLight,
+    padding: spacing.xxl - 2, gap: spacing.xs + 2,
   },
-  quickAddBtnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  lostLink: { alignSelf: 'center', marginTop: 12, paddingVertical: 4 },
-  lostLinkText: { color: colors.textSecondary, fontWeight: '500', fontSize: 13.5 },
-  recentHeader: { marginTop: 22, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 },
-  recentAll: { fontWeight: '500', fontSize: 13, color: colors.indigo },
+  quickAddTitle: { ...typography.title3, color: colors.textPrimary },
+  quickAddBody: { ...typography.callout, fontWeight: '400', color: colors.indigo },
+  quickAddBtn: {
+    marginTop: spacing.md + 2, height: controls.secondaryHeight, borderRadius: radii.md,
+    backgroundColor: colors.indigo,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+  },
+  quickAddBtnText: { color: '#fff', ...typography.bodyStrong },
+  // Deliberately quieter than the primary add CTA above it.
+  lostLink: { alignSelf: 'center', marginTop: spacing.md, paddingVertical: spacing.xs },
+  lostLinkText: { ...typography.footnote, color: colors.textSecondary, fontWeight: '500' },
+  recentHeader: {
+    marginTop: spacing.xxl - 2, flexDirection: 'row', alignItems: 'baseline',
+    justifyContent: 'space-between', paddingHorizontal: spacing.xs,
+  },
+  recentAll: { ...typography.footnote, color: colors.indigo, fontWeight: '500' },
 });

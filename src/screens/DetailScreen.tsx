@@ -1,17 +1,27 @@
 import React from 'react';
 import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, radii } from '../theme';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
+import { colors, motion, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, SecondaryButton } from '../components/common';
 import { PhotoIcon, StarIcon } from '../components/icons';
+
+const AnimatedSafeArea = Animated.createAnimatedComponent(SafeAreaView);
 
 export default function DetailScreen() {
   const {
     detail, closeDetail, toggleFav, openMove, confirmLoc, deleteItem, openEditForm, markLost, openFoundSheet,
   } = useDepo();
+  const reduced = useReducedMotion();
   const d = detail();
   if (!d) return null;
+
+  // Overlays are conditionally mounted, so an entering animation is enough —
+  // there is no exit frame to animate against.
+  const entering = reduced
+    ? FadeIn.duration(motion.duration.fast)
+    : FadeInDown.duration(motion.duration.normal).withInitialValues({ transform: [{ translateY: 8 }] });
 
   const onDelete = () => {
     Alert.alert('Bu kaydı silmek istediğine emin misin?', d.name + ' kalıcı olarak silinecek.', [
@@ -32,7 +42,7 @@ export default function DetailScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+    <AnimatedSafeArea style={styles.root} edges={['top', 'bottom']} entering={entering}>
       <View style={styles.header}>
         <Pressable onPress={closeDetail} hitSlop={8}>
           <Text style={styles.back}>‹ Geri</Text>
@@ -67,10 +77,11 @@ export default function DetailScreen() {
 
         <View style={styles.locCard}>
           <Text style={styles.locLabel}>{d.isLost ? 'Son bilinen konum' : 'Bulunduğu yer'}</Text>
-          <View style={{ gap: 2 }}>
-            {d.lines.map((line, i) => (
-              <Text key={i} style={styles.locLine}>{line}</Text>
-            ))}
+          <View style={styles.locLines}>
+            <Text style={styles.locPrimary}>{d.lines[0]}</Text>
+            {d.lines.length > 1 ? (
+              <Text style={styles.locPath}>{d.lines.slice(1).join('  ›  ')}</Text>
+            ) : null}
           </View>
           {d.isLost ? (
             <Text style={styles.lostLine}>{d.lostDaysLabel}</Text>
@@ -117,57 +128,71 @@ export default function DetailScreen() {
           <Text style={styles.deleteText}>Kaydı sil</Text>
         </Pressable>
       </ScrollView>
-    </SafeAreaView>
+    </AnimatedSafeArea>
   );
 }
 
 const styles = StyleSheet.create({
   root: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20, backgroundColor: colors.appBg },
   header: {
-    paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row',
+    paddingHorizontal: spacing.xl, paddingVertical: spacing.md, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'space-between',
   },
-  back: { color: colors.indigo, fontWeight: '500', fontSize: 16 },
-  edit: { color: colors.indigo, fontWeight: '600', fontSize: 16 },
-  content: { paddingHorizontal: 20, paddingBottom: 40 },
+  back: { ...typography.body, color: colors.indigo, fontWeight: '500' },
+  edit: { ...typography.bodyStrong, color: colors.indigo },
+  content: { paddingHorizontal: spacing.xl, paddingBottom: 40 },
   photo: { borderRadius: radii.lg, height: 190, backgroundColor: colors.photoPlaceholderBg },
   photoPlaceholder: {
     borderRadius: radii.lg, height: 190, backgroundColor: colors.photoPlaceholderBg,
     borderWidth: 1, borderStyle: 'dashed', borderColor: colors.photoPlaceholderBorder,
     alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  photoPlaceholderText: { fontWeight: '500', fontSize: 12.5, color: colors.textWarm2 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginVertical: 16, gap: 10 },
-  name: { flex: 1, fontWeight: '700', fontSize: 28, letterSpacing: -0.6, color: colors.textPrimary },
-  favBtn: { padding: 2 },
-  locCard: {
-    borderRadius: radii.xl, backgroundColor: colors.card, padding: 22, gap: 14,
-    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 12, shadowOffset: { width: 0, height: 2 },
+  photoPlaceholderText: { ...typography.caption, color: colors.textWarm2 },
+  nameRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginVertical: spacing.lg, gap: spacing.sm + 2,
   },
-  locLabel: { fontWeight: '600', fontSize: 12, color: colors.textSecondary, letterSpacing: 0.6, textTransform: 'uppercase' },
-  locLine: { fontWeight: '600', fontSize: 21, lineHeight: 28, color: colors.textPrimary },
-  confirmed: { fontSize: 13, color: colors.accent },
-  lostLine: { fontSize: 13, color: colors.lost, fontWeight: '600' },
-  locActions: { flexDirection: 'row', gap: 10, marginTop: 2 },
+  name: { flex: 1, ...typography.title1, fontSize: 28, lineHeight: 34, color: colors.textPrimary },
+  favBtn: { padding: 2 },
+  // The one real hero surface on this screen — this is the answer the user
+  // opened the app for, so it keeps its elevation.
+  locCard: { ...surfaces.hero, padding: spacing.xxl - 2, gap: spacing.md + 2 },
+  locLabel: { ...typography.overline, color: colors.textSecondary, textTransform: 'uppercase' },
+  locLines: { gap: spacing.xs },
+  locPrimary: { ...typography.title2, color: colors.textPrimary },
+  locPath: { ...typography.headline, color: colors.textSecondary },
+  confirmed: { ...typography.footnote, color: colors.accent },
+  lostLine: { ...typography.footnote, color: colors.lost, fontWeight: '600' },
+  locActions: { flexDirection: 'row', gap: spacing.sm + 2, marginTop: 2 },
   foundBtn: {
-    marginTop: 14, height: 56, borderRadius: radii.md, backgroundColor: colors.accent,
+    marginTop: spacing.md + 2, height: 56, borderRadius: radii.md, backgroundColor: colors.accent,
     alignItems: 'center', justifyContent: 'center',
   },
-  foundBtnText: { color: '#fff', fontWeight: '700', fontSize: 17 },
-  markLostBtn: { marginTop: 14, alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 10 },
-  markLostText: { color: colors.lost, fontWeight: '500', fontSize: 14 },
-  noteCard: { marginTop: 16, borderRadius: radii.md, backgroundColor: colors.card, padding: 16 },
-  noteLabel: { fontWeight: '600', fontSize: 12, color: colors.textSecondary, marginBottom: 7 },
-  noteText: { fontSize: 15, lineHeight: 21.75, color: colors.textPrimary },
-  historyLabel: { marginTop: 24, fontWeight: '600', fontSize: 13, color: colors.textSecondary, paddingLeft: 4 },
-  historyCard: { marginTop: 10, borderRadius: radii.md, backgroundColor: colors.card, overflow: 'hidden' },
+  foundBtnText: { color: '#fff', ...typography.headline, fontWeight: '700' },
+  markLostBtn: {
+    marginTop: spacing.md + 2, alignSelf: 'center',
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
+  },
+  markLostText: { ...typography.subheadline, color: colors.lost, fontWeight: '500' },
+  noteCard: { ...surfaces.card, marginTop: spacing.lg, padding: spacing.lg },
+  noteLabel: { ...typography.overline, color: colors.textSecondary, marginBottom: spacing.sm - 2 },
+  noteText: { ...typography.callout, fontWeight: '400', lineHeight: 21, color: colors.textPrimary },
+  historyLabel: {
+    marginTop: spacing.xxl, ...typography.footnote, fontWeight: '600',
+    color: colors.textSecondary, paddingLeft: spacing.xs,
+  },
+  historyCard: { ...surfaces.card, marginTop: spacing.sm + 2, overflow: 'hidden' },
   historyRow: {
-    paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: spacing.md + 2, paddingHorizontal: spacing.lg,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline,
   },
   dot: { width: 8, height: 8, borderRadius: 99 },
-  historyWhere: { flex: 1, fontWeight: '500', fontSize: 15, color: colors.textPrimary },
-  historyWhen: { fontSize: 13, color: colors.textTertiary },
-  deleteBtn: { marginTop: 26, alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 12 },
-  deleteText: { color: colors.danger, fontWeight: '500', fontSize: 15 },
+  historyWhere: { flex: 1, ...typography.callout, color: colors.textPrimary },
+  historyWhen: { ...typography.footnote, color: colors.textTertiary },
+  deleteBtn: {
+    marginTop: spacing.xxl + 2, alignSelf: 'center',
+    paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.md,
+  },
+  deleteText: { ...typography.callout, color: colors.danger },
 });

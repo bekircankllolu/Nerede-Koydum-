@@ -6,29 +6,34 @@ import Animated, {
   withSpring, withTiming, Extrapolation,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { colors, radii } from '../theme';
+import { colors, radii, spacing, surfaces, typography } from '../theme';
 import { itemColor, type ItemColorKey } from '../lib/colors';
 import { ChevronRight, StarIcon, TrashIcon } from './icons';
 import StatusBadge from './StatusBadge';
 
+// Callbacks take the row's id rather than closing over it, so screens can
+// pass referentially stable handlers and the React.memo below actually
+// holds while a long list scrolls.
 type Props = {
+  id: string;
   initial: string;
   name: string;
   subtitle: string;
-  onPress: () => void;
+  onPress: (id: string) => void;
   avatarSize?: number;
-  favMark?: string;
+  /** Passive favourite marker on the row (not the swipe action). */
+  showFavMark?: boolean;
   rightLabel?: string;
   showChevron?: boolean;
   colorKey?: ItemColorKey;
   lost?: boolean;
   /** Swipe actions are enabled only when at least one of these is provided. */
   isFav?: boolean;
-  onToggleFav?: () => void;
+  onToggleFav?: (id: string) => void;
   /** Normal swipe + tap on the capsule: shows the existing confirm Alert. */
-  onDeleteConfirm?: () => void;
+  onDeleteConfirm?: (id: string) => void;
   /** Full swipe past the commit threshold: immediate + undoable, no Alert. */
-  onFullSwipeDelete?: () => void;
+  onFullSwipeDelete?: (id: string) => void;
 };
 
 // Apple Music model: the card is a rigid, full-width layer that only ever
@@ -71,8 +76,8 @@ function toRaw(effective: number): number {
 // Only one row may sit in the resting-open state at a time.
 const openRow: { current: { id: object; close: () => void } | null } = { current: null };
 
-export default function ItemRow({
-  initial, name, subtitle, onPress, avatarSize = 48, favMark, rightLabel, showChevron,
+function ItemRow({
+  id, initial, name, subtitle, onPress, avatarSize = 48, showFavMark, rightLabel, showChevron,
   colorKey = 'indigo', lost, isFav, onToggleFav, onDeleteConfirm, onFullSwipeDelete,
 }: Props) {
   const swipeEnabled = !!(onToggleFav || onDeleteConfirm || onFullSwipeDelete);
@@ -118,8 +123,8 @@ export default function ItemRow({
     // The row stays mounted, so the collapse keeps playing while the star
     // fills in — no perceived delay.
     clearOpen();
-    onToggleFav?.();
-  }, [clearOpen, onToggleFav]);
+    onToggleFav?.(id);
+  }, [clearOpen, onToggleFav, id]);
 
   const startFullDelete = useCallback(() => {
     clearOpen();
@@ -127,9 +132,9 @@ export default function ItemRow({
   }, [clearOpen]);
 
   const finishFullDelete = useCallback(() => {
-    if (onFullSwipeDelete) onFullSwipeDelete();
-    else onDeleteConfirm?.();
-  }, [onFullSwipeDelete, onDeleteConfirm]);
+    if (onFullSwipeDelete) onFullSwipeDelete(id);
+    else onDeleteConfirm?.(id);
+  }, [onFullSwipeDelete, onDeleteConfirm, id]);
 
   const pan = Gesture.Pan()
     .enabled(swipeEnabled && !removing)
@@ -266,18 +271,21 @@ export default function ItemRow({
     };
   });
 
+  // A tap on an open row closes it instead of navigating.
   const onCardPress = () => {
     if (tx.value !== 0) {
       close();
       return;
     }
-    onPress();
+    onPress(id);
   };
+
+  const onPlainPress = () => onPress(id);
 
   const handleFavTap = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     close();
-    onToggleFav?.();
+    onToggleFav?.(id);
   };
 
   const handleDeleteTap = () => {
@@ -292,7 +300,7 @@ export default function ItemRow({
           onPress: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
             close();
-            onDeleteConfirm?.();
+            onDeleteConfirm?.(id);
           },
         },
       ]
@@ -301,7 +309,7 @@ export default function ItemRow({
 
   const body = (
     <Pressable
-      onPress={swipeEnabled ? onCardPress : onPress}
+      onPress={swipeEnabled ? onCardPress : onPlainPress}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
       <View
@@ -315,7 +323,7 @@ export default function ItemRow({
       <View style={styles.textCol}>
         <View style={styles.nameRow}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
-          {!!favMark && <Text style={styles.fav}>{favMark}</Text>}
+          {showFavMark ? <StarIcon size={13} color={colors.favorite} filled /> : null}
           {lost ? <StatusBadge /> : null}
         </View>
         <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
@@ -376,34 +384,35 @@ export default function ItemRow({
   );
 }
 
+// Every prop is a primitive or a stable id-based callback, so this bails out
+// of re-rendering unrelated rows when one item changes.
+export default React.memo(ItemRow);
+
 const styles = StyleSheet.create({
   rowWrap: { position: 'relative' },
+  // No shadow here on purpose: a list of shadowed cards is both visually
+  // noisy and the most expensive thing to composite while scrolling. A
+  // hairline against the warm background separates it just as well.
   row: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    paddingVertical: 13,
-    paddingHorizontal: 14,
+    ...surfaces.card,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg - 2,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
+    gap: spacing.md,
   },
-  rowPressed: { backgroundColor: '#FBFAF7' },
+  rowPressed: { backgroundColor: colors.cardPressed },
   avatar: {
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   avatarText: { fontWeight: '700', fontSize: 18 },
-  textCol: { flex: 1, minWidth: 0, gap: 3 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  name: { fontWeight: '600', fontSize: 16, color: colors.textPrimary, flexShrink: 1 },
-  fav: { color: colors.favorite, fontWeight: '600', fontSize: 12 },
-  subtitle: { fontSize: 13, color: colors.textSecondary },
-  rightLabel: { fontSize: 11.5, color: colors.textTertiary, flexShrink: 0 },
+  textCol: { flex: 1, minWidth: 0, gap: 2 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
+  name: { ...typography.bodyStrong, color: colors.textPrimary, flexShrink: 1 },
+  subtitle: { ...typography.footnote, color: colors.textSecondary },
+  rightLabel: { ...typography.caption, color: colors.textTertiary, flexShrink: 0 },
   // The capsule lives behind the (always full-width) card, pinned to the
   // row's own outer edge, so nothing ever has to clip anything else.
   capsuleSlot: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center' },

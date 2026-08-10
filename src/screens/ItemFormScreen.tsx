@@ -4,11 +4,14 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, radii } from '../theme';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
+import { colors, motion, radii, surfaces } from '../theme';
 import { useDepo } from '../state/DepoContext';
 import { PrimaryButton, MicButton } from '../components/common';
 import ColorPicker from '../components/ColorPicker';
 import { PhotoIcon } from '../components/icons';
+
+const AnimatedSafeArea = Animated.createAnimatedComponent(SafeAreaView);
 
 async function takePhoto(): Promise<string | null> {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -39,12 +42,18 @@ export default function ItemFormScreen() {
     formColorKey, setFormColorKey, formValid, formSaving, locSuggestions, startVoice, saveForm,
   } = useDepo();
 
+  const reduced = useReducedMotion();
+  // Full-screen form, so it fades up rather than sliding like a sheet.
+  const entering = reduced
+    ? FadeIn.duration(motion.duration.fast)
+    : FadeInDown.duration(motion.duration.normal).withInitialValues({ transform: [{ translateY: 10 }] });
+
   const copy = COPY[formMode];
   const isLostCreate = formMode === 'lost-create';
   const locRef = useRef<TextInput>(null);
 
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+    <AnimatedSafeArea style={styles.root} edges={['top', 'bottom']} entering={entering}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>{copy.header}</Text>
@@ -176,7 +185,7 @@ export default function ItemFormScreen() {
           />
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </AnimatedSafeArea>
   );
 }
 
@@ -207,9 +216,8 @@ const styles = StyleSheet.create({
   fieldLabel: { fontWeight: '600', fontSize: 13, color: colors.textSecondary, paddingLeft: 4 },
   fieldRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   fieldBox: {
-    flex: 1, height: 56, borderRadius: radii.md, backgroundColor: colors.card,
-    justifyContent: 'center', paddingHorizontal: 16,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
+    ...surfaces.card,
+    flex: 1, height: 56, justifyContent: 'center', paddingHorizontal: 16,
   },
   fieldInput: { fontSize: 17, color: colors.textPrimary, padding: 0 },
   unknownLocBox: {
@@ -224,10 +232,7 @@ const styles = StyleSheet.create({
   suggestionText: { fontSize: 14, lineHeight: 16.8, color: colors.neutralChipText },
   noteToggle: { marginTop: 18, paddingVertical: 4 },
   noteToggleText: { fontWeight: '600', fontSize: 15, color: colors.indigo },
-  noteBox: {
-    marginTop: 4, borderRadius: radii.md, backgroundColor: colors.card, padding: 14,
-    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 2, shadowOffset: { width: 0, height: 1 },
-  },
+  noteBox: { ...surfaces.card, marginTop: 4, padding: 14 },
   noteInput: { fontSize: 15, lineHeight: 21, color: colors.textPrimary, padding: 0, minHeight: 24 },
   footer: {
     paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12,
