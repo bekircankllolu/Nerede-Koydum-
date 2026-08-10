@@ -30,17 +30,21 @@ type Props = {
   onFullSwipeDelete?: () => void;
 };
 
-const ACTION_WIDTH = 64;
-const ACTION_GAP = 8;
-// Distance at which the pill is fully sized (64) and the card stops
-// shrinking further — the boundary between "normal swipe" and "full swipe".
-const REVEAL_DISTANCE = ACTION_WIDTH + ACTION_GAP;
-// Release-time decision: past this (but not armed) -> snap open; under -> snap closed.
-const OPEN_SNAP_THRESHOLD = 40;
-// Dead zone before a gesture's direction (favorite vs delete) locks in.
-const DIRECTION_ACTIVATION_DISTANCE = 10;
-const FULL_SWIPE_RATIO = 0.5;
-const MAX_OPEN_RATIO = 0.72;
+// Apple Music model: the item card is a rigid, full-width layer that only
+// ever translates — it never resizes, so its content (avatar/name/location/
+// timestamp) never gets squeezed. The colored capsule lives in its own layer
+// behind the card, hugging the row's outer edge, and grows as the card
+// translates away from it.
+const CAPSULE_MAX = 64; // capsule's "resting" size once normal-open
+const ACTION_GAP = 8; // breathing room between the capsule and the card
+// Distance at which the capsule reaches CAPSULE_MAX and 1:1 finger tracking
+// gives way to resistance — the boundary between "normal swipe" and "full swipe".
+const REVEAL_DISTANCE = CAPSULE_MAX + ACTION_GAP;
+const RESISTANCE = 0.88; // damping applied to card/capsule growth beyond REVEAL_DISTANCE
+const DIRECTION_ACTIVATION_DISTANCE = 10; // dead zone before a gesture's direction locks
+const FULL_SWIPE_RATIO = 0.48; // committed-action threshold, fraction of row width
+const MAX_RAW_RATIO = 0.85; // hard cap on raw finger travel, fraction of row width
+const OPEN_SNAP_THRESHOLD = 40; // release-without-arming: snap open vs snap closed
 const DEFAULT_ROW_WIDTH = 320;
 
 // Only one row's swipe may be open at a time, tracked by a stable per-row
@@ -56,24 +60,27 @@ export default function ItemRow({
   const color = itemColor(colorKey);
 
   const rowId = useRef({}).current;
+  // Raw (direction-clamped) signed drag distance in px. Negative = favorite
+  // side (left swipe), positive = delete side (right swipe).
   const x = useRef(new Animated.Value(0)).current;
   const restRef = useRef(0);
   const armedRef = useRef(false);
   const directionRef = useRef<'left' | 'right' | null>(null);
   const [rowWidth, setRowWidth] = useState(DEFAULT_ROW_WIDTH);
 
-  const maxOpen = Math.max(REVEAL_DISTANCE + 20, rowWidth * MAX_OPEN_RATIO);
-  const fullThreshold = Math.max(REVEAL_DISTANCE + 40, rowWidth * FULL_SWIPE_RATIO);
-  const openCardWidth = Math.max(rowWidth * 0.4, rowWidth - REVEAL_DISTANCE);
+  const maxRaw = Math.max(REVEAL_DISTANCE + 60, rowWidth * MAX_RAW_RATIO);
+  const fullThreshold = Math.max(REVEAL_DISTANCE + 30, rowWidth * FULL_SWIPE_RATIO);
+  // How far the card has actually translated at maxRaw, after resistance.
+  const maxEffective = REVEAL_DISTANCE + (maxRaw - REVEAL_DISTANCE) * RESISTANCE;
 
   // A gesture's direction, once locked, cannot flip sides mid-gesture — a
   // right-swipe-in-progress can shrink back toward 0 but must never cross
-  // into favorite territory, and vice versa (test cases H/I in the spec).
+  // into favorite territory, and vice versa.
   function clampToDirection(raw: number, dir: 'left' | 'right' | null): number {
     let v = raw;
     if (dir === 'left') v = Math.min(0, v);
     else if (dir === 'right') v = Math.max(0, v);
-    return Math.max(-maxOpen, Math.min(maxOpen, v));
+    return Math.max(-maxRaw, Math.min(maxRaw, v));
   }
 
   function settleTo(target: number) {
@@ -81,9 +88,9 @@ export default function ItemRow({
     Animated.spring(x, {
       toValue: target,
       useNativeDriver: false,
-      damping: 22,
-      mass: 0.5,
-      stiffness: 320,
+      damping: 24,
+      mass: 0.85,
+      stiffness: 260,
       overshootClamping: true,
     }).start();
     if (target === 0) {
@@ -134,7 +141,7 @@ export default function ItemRow({
 
       // The decision uses the value AT RELEASE, not "was it ever armed" —
       // dragging past the threshold and back below it before lifting the
-      // finger must cancel the action (test case D/G).
+      // finger must cancel the action.
       if (wasArmed && finalValue <= -fullThreshold && onToggleFav) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
         onToggleFav();
@@ -220,51 +227,50 @@ export default function ItemRow({
     return body;
   }
 
-  // Phase 1 (0 -> REVEAL_DISTANCE): card shrinks from full width down to
-  // openCardWidth while the pill reveals — this is the only phase where the
-  // card's own content width changes.
-  // Phase 2 (beyond REVEAL_DISTANCE): the card's width is pinned at
-  // openCardWidth — extra drag only translates the (now rigid) card further
-  // and grows the pill, so item text/avatar/timestamp never get squeezed.
-  const cardWidth = x.interpolate({
-    inputRange: [-maxOpen, -REVEAL_DISTANCE, 0, REVEAL_DISTANCE, maxOpen],
-    outputRange: [openCardWidth, openCardWidth, rowWidth, openCardWidth, openCardWidth],
-    extrapolate: 'clamp',
-  });
+  // The card's own width is never animated — it stays exactly rowWidth
+  // (its natural flex-stretched size) for the entire gesture. Only its
+  // translateX moves: 1:1 with the finger up to REVEAL_DISTANCE, then
+  // resisted beyond it, exactly mirroring how far the capsule can grow.
   const cardTranslateX = x.interpolate({
-    inputRange: [-maxOpen, -REVEAL_DISTANCE, 0, REVEAL_DISTANCE, maxOpen],
-    outputRange: [-(maxOpen - REVEAL_DISTANCE), 0, 0, REVEAL_DISTANCE, maxOpen],
+    inputRange: [-maxRaw, -REVEAL_DISTANCE, 0, REVEAL_DISTANCE, maxRaw],
+    outputRange: [-maxEffective, -REVEAL_DISTANCE, 0, REVEAL_DISTANCE, maxEffective],
     extrapolate: 'clamp',
   });
 
+  // Capsule width = how far the card has receded, minus the fixed gap —
+  // this keeps the capsule always exactly ACTION_GAP away from the card's
+  // moving edge, whether in the 1:1 zone or the resisted full-swipe zone.
   const favPillWidth = x.interpolate({
-    inputRange: [-maxOpen, -ACTION_GAP],
-    outputRange: [maxOpen - ACTION_GAP, 0],
+    inputRange: [-maxRaw, -REVEAL_DISTANCE, -ACTION_GAP],
+    outputRange: [maxEffective - ACTION_GAP, CAPSULE_MAX, 0],
     extrapolate: 'clamp',
   });
   const delPillWidth = x.interpolate({
-    inputRange: [ACTION_GAP, maxOpen],
-    outputRange: [0, maxOpen - ACTION_GAP],
+    inputRange: [ACTION_GAP, REVEAL_DISTANCE, maxRaw],
+    outputRange: [0, CAPSULE_MAX, maxEffective - ACTION_GAP],
     extrapolate: 'clamp',
   });
+
   const favIconOpacity = x.interpolate({
-    inputRange: [-ACTION_WIDTH, -ACTION_WIDTH * 0.35],
+    inputRange: [-REVEAL_DISTANCE * 0.5, -ACTION_GAP],
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
   const delIconOpacity = x.interpolate({
-    inputRange: [ACTION_WIDTH * 0.35, ACTION_WIDTH],
+    inputRange: [ACTION_GAP, REVEAL_DISTANCE * 0.5],
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
+  // One continuous curve: starts small on reveal (0.85), settles at normal
+  // size (1) once resting-open, then pulses up (1.1) once armed for commit.
   const favIconScale = x.interpolate({
-    inputRange: [-fullThreshold, -fullThreshold * 0.85],
-    outputRange: [1.15, 1],
+    inputRange: [-fullThreshold, -fullThreshold * 0.85, -REVEAL_DISTANCE, -ACTION_GAP],
+    outputRange: [1.1, 1, 1, 0.85],
     extrapolate: 'clamp',
   });
   const delIconScale = x.interpolate({
-    inputRange: [fullThreshold * 0.85, fullThreshold],
-    outputRange: [1, 1.15],
+    inputRange: [ACTION_GAP, REVEAL_DISTANCE, fullThreshold * 0.85, fullThreshold],
+    outputRange: [0.85, 1, 1, 1.1],
     extrapolate: 'clamp',
   });
 
@@ -312,7 +318,7 @@ export default function ItemRow({
         activeOffsetX={[-10, 10]}
         failOffsetY={[-8, 8]}
       >
-        <Animated.View style={{ width: cardWidth, transform: [{ translateX: cardTranslateX }] }}>
+        <Animated.View style={{ transform: [{ translateX: cardTranslateX }] }}>
           {body}
         </Animated.View>
       </PanGestureHandler>
@@ -348,9 +354,8 @@ const styles = StyleSheet.create({
   fav: { color: colors.favorite, fontWeight: '600', fontSize: 12 },
   subtitle: { fontSize: 13, color: colors.textSecondary },
   rightLabel: { fontSize: 11.5, color: colors.textTertiary, flexShrink: 0 },
-  // Card and pills never overlap by construction — the card's own width
-  // shrinks only up to REVEAL_DISTANCE, then stays fixed; a growing pill
-  // never has to hide behind it, and nothing needs to be clipped.
+  // The capsule lives behind the (always full-width) card, hugging the
+  // row's own outer edge — nothing ever needs to clip anything else.
   pillSlot: { position: 'absolute', top: 0, bottom: 0, justifyContent: 'center' },
   pillSlotRight: { right: 0 },
   pillSlotLeft: { left: 0 },
