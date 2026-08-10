@@ -15,7 +15,7 @@ function lightHaptic() {
 export default function ItemsScreen() {
   const {
     storedItems, listed, filter, setFilter, filterDefs, card, isPro, accent,
-    toggleFavById, deleteItemById, openAddForm,
+    toggleFavById, deleteItemById, deleteItemByIdWithUndo, openAddForm,
     selectedLoc, locationOptions, locFilterOpen, openLocFilterSheet, closeLocFilterSheet, chooseLocFilter,
   } = useDepo();
   const countLabel = `${storedItems.length} eşya${isPro ? '' : ` · ücretsiz sınır ${FREE_ITEM_LIMIT}`}`;
@@ -90,7 +90,8 @@ export default function ItemsScreen() {
                   colorKey={c.colorKey}
                   isFav={it.fav}
                   onToggleFav={() => toggleFavById(it.id)}
-                  onDelete={() => deleteItemById(it.id)}
+                  onDeleteConfirm={() => deleteItemById(it.id)}
+                  onFullSwipeDelete={() => deleteItemByIdWithUndo(it.id)}
                 />
               );
             })}
