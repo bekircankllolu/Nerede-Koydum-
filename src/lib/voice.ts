@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { useI18n } from '../i18n/I18nProvider';
 
 type SpeechApi = typeof import('expo-speech-recognition');
 
@@ -20,9 +21,6 @@ const noopEvent: (...args: unknown[]) => void = () => {};
 const useSpeechEvent = (speech?.useSpeechRecognitionEvent ??
   noopEvent) as (...args: unknown[]) => void;
 
-const UNAVAILABLE_MESSAGE =
-  'Ses tanıma bu sürümde kullanılamıyor. Derlenmiş uygulamada çalışır.';
-
 export type VoiceStage = 'idle' | 'listening' | 'processing' | 'done' | 'no-speech' | 'error';
 
 export type VoiceState = {
@@ -39,6 +37,9 @@ const IDLE: VoiceState = { stage: 'idle', transcript: '', errorMessage: null };
 export function useVoiceRecognition() {
   const [state, setState] = useState<VoiceState>(IDLE);
   const finalizedRef = useRef(false);
+  // Recognition language follows the app's effective locale, so a user who
+  // switched to English in Settings dictates in English on a Turkish phone.
+  const { localeTag, t } = useI18n();
 
   useSpeechEvent('start', () => {
     finalizedRef.current = false;
@@ -75,23 +76,23 @@ export function useVoiceRecognition() {
 
   const start = useCallback(async () => {
     if (!speech) {
-      setState({ stage: 'error', transcript: '', errorMessage: UNAVAILABLE_MESSAGE });
+      setState({ stage: 'error', transcript: '', errorMessage: t('voice.unavailable') });
       return;
     }
     setState(IDLE);
     const perms = await speech.ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!perms.granted) {
-      setState({ stage: 'error', transcript: '', errorMessage: 'İzin verilmedi.' });
+      setState({ stage: 'error', transcript: '', errorMessage: t('voice.permissionDenied') });
       return;
     }
     finalizedRef.current = false;
     speech.ExpoSpeechRecognitionModule.start({
-      lang: 'tr-TR',
+      lang: localeTag,
       interimResults: true,
       continuous: false,
       maxAlternatives: 1,
     });
-  }, []);
+  }, [localeTag, t]);
 
   const stop = useCallback(() => {
     speech?.ExpoSpeechRecognitionModule.stop();

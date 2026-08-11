@@ -2,21 +2,23 @@ import React, { useCallback } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View, type ListRenderItem } from 'react-native';
 import { colors, radii, spacing, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
+import type { TranslateFn } from '../i18n/I18nProvider';
 import type { Item } from '../db';
 import { daysBetween } from '../lib/search';
 import ItemRow from '../components/ItemRow';
 import EmptyState from '../components/EmptyState';
 import { PlusIcon, TabLostIcon } from '../components/icons';
 
-function lostAgeLabel(item: Item, now: number) {
+function lostAgeLabel(item: Item, now: number, t: TranslateFn) {
   const days = Math.max(0, daysBetween(item.lostAt || item.updatedAt, now));
-  if (days === 0) return 'bugün kayıp';
-  if (days === 1) return '1 gündür kayıp';
-  return `${days} gündür kayıp`;
+  if (days === 0) return t('lost.ageToday');
+  return t('lost.ageDays', { count: days });
 }
 
 export default function LostItemsScreen() {
   const { lostItems, card, openLostForm, openItem } = useDepo();
+  const { t } = useI18n();
   const now = Math.floor(Date.now() / 60000) * 60000;
 
   const keyExtractor = useCallback((it: Item) => it.id, []);
@@ -31,19 +33,19 @@ export default function LostItemsScreen() {
         subtitle={c.fullLoc}
         onPress={openItem}
         photoUri={c.photoUri}
-        rightLabel={lostAgeLabel(item, now)}
+        rightLabel={lostAgeLabel(item, now, t)}
         rightLabelColor={colors.lost}
         colorKey={c.colorKey}
         showChevron
       />
     );
-  }, [card, openItem, now]);
+  }, [card, openItem, now, t]);
 
   const header = (
     <View style={styles.header}>
       <View style={styles.headerText}>
-        <Text style={styles.title}>Kayıplar</Text>
-        <Text style={styles.subtitle}>Bulamadığın eşyaları burada takip et.</Text>
+        <Text style={styles.title}>{t('lost.title')}</Text>
+        <Text style={styles.subtitle}>{t('lost.subtitle')}</Text>
       </View>
       <Pressable
         onPress={openLostForm}
@@ -52,10 +54,10 @@ export default function LostItemsScreen() {
         hitSlop={{ top: 4, bottom: 4 }}
         style={({ pressed }) => [styles.reportBtn, pressed && styles.reportBtnPressed]}
         accessibilityRole="button"
-        accessibilityLabel="Kayıp bildir"
+        accessibilityLabel={t('lost.report')}
       >
         <PlusIcon size={14} />
-        <Text style={styles.reportBtnText}>Kayıp bildir</Text>
+        <Text style={styles.reportBtnText} numberOfLines={1}>{t('lost.report')}</Text>
       </Pressable>
     </View>
   );
@@ -71,9 +73,9 @@ export default function LostItemsScreen() {
       ListEmptyComponent={
         <EmptyState
           icon={<TabLostIcon size={26} color={colors.indigo} />}
-          title="Şu an kayıp eşyan yok."
-          body="Bir şeyi bulamazsan burada takip edebilirsin."
-          ctaLabel="Kayıp bildir"
+          title={t('lost.emptyTitle')}
+          body={t('lost.emptyBody')}
+          ctaLabel={t('lost.report')}
           onPress={openLostForm}
         />
       }

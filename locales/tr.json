@@ -1,0 +1,6 @@
+{
+  "NSMicrophoneUsageDescription": "Eşya adını veya konumunu sesle kaydedebilmek için mikrofona erişim gerekir.",
+  "NSSpeechRecognitionUsageDescription": "Söylediklerini yazıya çevirmek için konuşma tanıma erişimi gerekir.",
+  "NSCameraUsageDescription": "Eşyalarının fotoğrafını çekebilmek için kameraya erişim gerekir.",
+  "NSPhotoLibraryUsageDescription": "Eşya fotoğrafı seçebilmek için fotoğraf arşivine erişim gerekir."
+}

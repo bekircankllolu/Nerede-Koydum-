@@ -3,24 +3,27 @@ import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
+import type { TranslationKey } from '../i18n';
 import { PrimaryButton, SecondaryButton } from '../components/common';
 import { MicIcon } from '../components/icons';
 import Waveform from '../components/Waveform';
 
-const COPY: Record<string, { title: string; hint: string }> = {
-  listening: { title: 'Dinliyorum…', hint: 'Eşyanın adını ya da yerini söyle.' },
-  processing: { title: 'Bir saniye…', hint: 'Yazıya çeviriyorum.' },
-  done: { title: 'Şunu duydum', hint: 'Doğruysa kullan, değilse yeniden söyle.' },
-  'no-speech': { title: 'Duyamadım', hint: 'Tekrar dener misin, yoksa yazarak girebilirsin.' },
-  error: { title: 'Bir sorun oldu', hint: 'Mikrofon veya izinle ilgili bir sorun oluştu.' },
+const STAGE_COPY: Record<string, { title: TranslationKey; hint: TranslationKey }> = {
+  listening: { title: 'voice.listeningTitle', hint: 'voice.listeningHint' },
+  processing: { title: 'voice.processingTitle', hint: 'voice.processingHint' },
+  done: { title: 'voice.doneTitle', hint: 'voice.doneHint' },
+  'no-speech': { title: 'voice.noSpeechTitle', hint: 'voice.noSpeechHint' },
+  error: { title: 'voice.errorTitle', hint: 'voice.errorHint' },
 };
 
 export default function VoicePanel() {
   const { voice, voiceRetry, voiceUse, accent } = useDepo();
-  const copy = COPY[voice.stage] || COPY.listening;
+  const { t } = useI18n();
+  const copy = STAGE_COPY[voice.stage] || STAGE_COPY.listening;
   const showWave = voice.stage === 'listening' || voice.stage === 'processing';
   const showResult = voice.stage === 'done';
-  const secondaryLabel = showWave ? 'Yazarak gir' : 'Yeniden söyle';
+  const secondaryLabel = showWave ? t('voice.typeInstead') : t('voice.sayAgain');
 
   return (
     <View style={styles.scrim}>
@@ -30,8 +33,8 @@ export default function VoicePanel() {
             <MicIcon size={19} color={colors.indigo} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>{copy.title}</Text>
-            <Text style={styles.hint}>{copy.hint}</Text>
+            <Text style={styles.title}>{t(copy.title)}</Text>
+            <Text style={styles.hint}>{t(copy.hint)}</Text>
           </View>
         </View>
 
@@ -45,7 +48,7 @@ export default function VoicePanel() {
         <View style={styles.actions}>
           <SecondaryButton label={secondaryLabel} onPress={voiceRetry} style={{ flex: 1 }} />
           <PrimaryButton
-            label="Kullan"
+            label={t('voice.use')}
             onPress={voiceUse}
             disabled={!showResult}
             bg={showResult ? accent : colors.indigoSoftDisabled}

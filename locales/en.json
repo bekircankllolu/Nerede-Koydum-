@@ -1,0 +1,6 @@
+{
+  "NSMicrophoneUsageDescription": "Depo needs microphone access to let you add item names or locations by voice.",
+  "NSSpeechRecognitionUsageDescription": "Depo needs speech recognition to turn what you say into text.",
+  "NSCameraUsageDescription": "Depo needs camera access so you can take photos of your items.",
+  "NSPhotoLibraryUsageDescription": "Depo needs photo library access so you can choose item photos."
+}

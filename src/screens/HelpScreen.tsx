@@ -3,48 +3,36 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii, FREE_ITEM_LIMIT } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
+import type { TranslationKey } from '../i18n';
 
-const TOPICS = [
-  {
-    title: 'Bir eşya nasıl kaydedilir?',
-    body: '"Eşyalar" sekmesinde sağ üstteki artı düğmesine bas, adını ve konumunu yaz ya da söyle. İstersen bir fotoğraf ekle.',
-  },
-  {
-    title: 'Bir eşyayı nasıl bulurum?',
-    body: '"Bul" sekmesine adını yaz, örneğin "pasaport nerede" — Depo soru kalıplarını temizleyip sonuçları isim, not ve konum eşleşmesine göre sıralar.',
-  },
-  {
-    title: 'Sesle nasıl kaydedebilirim?',
-    body: 'Arama kutusu, eşya adı, konum ve yer değiştirme alanlarındaki mikrofon simgesine bas, konuş, bitince otomatik yazıya çevrilir.',
-  },
-  {
-    title: 'Bir eşyanın yerini nasıl güncellerim?',
-    body: 'Eşyanın detay sayfasında "Yerini değiştir" ile yeni konuma taşı, ya da hâlâ aynı yerdeyse "Konumu doğrula" ile kaydı tazele.',
-  },
-  {
-    title: 'Ücretsiz sınır nedir?',
-    body: `Ücretsiz hesapta ${FREE_ITEM_LIMIT} eşyaya kadar kayıt tutabilirsin. Daha fazlası için Depo Pro'ya geçmen gerekir.`,
-  },
+const TOPIC_KEYS: { title: TranslationKey; body: TranslationKey }[] = [
+  { title: 'help.q1Title', body: 'help.q1Body' },
+  { title: 'help.q2Title', body: 'help.q2Body' },
+  { title: 'help.q3Title', body: 'help.q3Body' },
+  { title: 'help.q4Title', body: 'help.q4Body' },
+  { title: 'help.q5Title', body: 'help.q5Body' },
 ];
 
 export default function HelpScreen() {
   const { closeHelp } = useDepo();
+  const { t } = useI18n();
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={closeHelp} hitSlop={8}>
-          <Text style={styles.back}>‹ Geri</Text>
+        <Pressable onPress={closeHelp} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.backA11y')}>
+          <Text style={styles.back} numberOfLines={1}>{t('common.back')}</Text>
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Yardım</Text>
+        <Text style={styles.title}>{t('help.title')}</Text>
 
-        {TOPICS.map((t) => (
-          <View key={t.title} style={styles.card}>
-            <Text style={styles.cardTitle}>{t.title}</Text>
-            <Text style={styles.cardBody}>{t.body}</Text>
+        {TOPIC_KEYS.map((topic) => (
+          <View key={topic.title} style={styles.card}>
+            <Text style={styles.cardTitle}>{t(topic.title)}</Text>
+            <Text style={styles.cardBody}>{t(topic.body, { limit: FREE_ITEM_LIMIT })}</Text>
           </View>
         ))}
       </ScrollView>

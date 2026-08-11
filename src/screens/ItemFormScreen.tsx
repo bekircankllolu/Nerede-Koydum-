@@ -7,6 +7,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { colors, controls, motion, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
+import type { TranslationKey } from '../i18n';
 import { PrimaryButton, MicButton } from '../components/common';
 import ColorPicker from '../components/ColorPicker';
 import { PhotoIcon } from '../components/icons';
@@ -37,11 +39,12 @@ async function pickFromGallery(): Promise<PhotoPick> {
   return { status: 'picked', uri: result.assets[0].uri };
 }
 
-const COPY = {
-  create: { header: 'Yeni eşya', nameLabel: 'Ne koydun?', namePh: 'Örneğin: Pasaport', locLabel: 'Nereye koydun?', save: 'Eşyayı kaydet' },
-  edit: { header: 'Eşyayı düzenle', nameLabel: 'Ne koydun?', namePh: 'Örneğin: Pasaport', locLabel: 'Nereye koydun?', save: 'Değişiklikleri kaydet' },
-  'lost-create': { header: 'Kayıp bildir', nameLabel: 'Ne kaybettin?', namePh: 'Örneğin: AirPods', locLabel: 'En son nerede gördün?', save: 'Kayıp olarak kaydet' },
-} as const;
+// One namespace per mode, so the whole form re-labels from a single lookup.
+const COPY_NS: Record<string, string> = {
+  create: 'form.create',
+  edit: 'form.edit',
+  'lost-create': 'form.lostCreate',
+};
 
 export default function ItemFormScreen() {
   const {
@@ -49,6 +52,7 @@ export default function ItemFormScreen() {
     formNote, setFormNote, formNoteOpen, setFormNoteOpen, formPhotoUri, setFormPhotoUri,
     formColorKey, setFormColorKey, formValid, formSaving, locSuggestions, startVoice, saveForm, flash,
   } = useDepo();
+  const { t } = useI18n();
 
   const reduced = useReducedMotion();
   // Full-screen form, so it fades up rather than sliding like a sheet.
@@ -56,18 +60,25 @@ export default function ItemFormScreen() {
     ? FadeIn.duration(motion.duration.fast)
     : FadeInDown.duration(motion.duration.normal).withInitialValues({ transform: [{ translateY: 10 }] });
 
-  const copy = COPY[formMode];
+  const ns = COPY_NS[formMode];
+  const copy = {
+    header: t(`${ns}.header` as TranslationKey),
+    nameLabel: t(`${ns}.nameLabel` as TranslationKey),
+    namePh: t(`${ns}.namePlaceholder` as TranslationKey),
+    locLabel: t(`${ns}.locLabel` as TranslationKey),
+    save: t(`${ns}.save` as TranslationKey),
+  };
   const isLostCreate = formMode === 'lost-create';
   const locRef = useRef<TextInput>(null);
   // Focus is shown by tinting the existing hairline — no glow, no size change,
   // so nothing in the layout shifts when the keyboard arrives.
   const [focused, setFocused] = useState<'name' | 'loc' | null>(null);
 
-  const choosePhoto = async (pick: () => Promise<PhotoPick>, what: string) => {
+  const choosePhoto = async (pick: () => Promise<PhotoPick>, deniedKey: TranslationKey) => {
     const result = await pick();
     if (result.status === 'picked') setFormPhotoUri(result.uri);
     else if (result.status === 'denied') {
-      flash('İzin gerekli.', `Ayarlar'dan ${what} erişimine izin verebilirsin.`);
+      flash(t('form.permissionTitle'), t(deniedKey));
     }
     // 'canceled' is deliberately silent.
   };
@@ -78,7 +89,9 @@ export default function ItemFormScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>{copy.header}</Text>
           <Pressable onPress={closeForm} hitSlop={8} disabled={formSaving}>
-            <Text style={[styles.cancel, formSaving && styles.cancelDisabled]}>Vazgeç</Text>
+            <Text style={[styles.cancel, formSaving && styles.cancelDisabled]} numberOfLines={1}>
+              {t('common.cancel')}
+            </Text>
           </Pressable>
         </View>
 
@@ -87,31 +100,31 @@ export default function ItemFormScreen() {
             <View style={styles.photoPreviewWrap}>
               <Image source={{ uri: formPhotoUri }} style={styles.photoPreview} resizeMode="cover" />
               <Pressable style={styles.removePhoto} onPress={() => setFormPhotoUri(null)}>
-                <Text style={styles.removePhotoText}>Kaldır</Text>
+                <Text style={styles.removePhotoText} numberOfLines={1}>{t('form.photoRemove')}</Text>
               </Pressable>
             </View>
           ) : (
             <View style={styles.photoBox}>
               <View style={styles.photoBoxHead}>
                 <PhotoIcon size={22} />
-                <Text style={styles.photoBoxLabel}>Fotoğraf ekle</Text>
+                <Text style={styles.photoBoxLabel}>{t('form.photoAdd')}</Text>
               </View>
               <View style={styles.photoActions}>
                 <Pressable
                   style={({ pressed }) => [styles.photoActionBtn, pressed && styles.pressed]}
-                  onPress={() => choosePhoto(takePhoto, 'kamera')}
+                  onPress={() => choosePhoto(takePhoto, 'form.permissionCamera')}
                   accessibilityRole="button"
-                  accessibilityLabel="Fotoğraf çek"
+                  accessibilityLabel={t('form.photoTake')}
                 >
-                  <Text style={styles.photoActionText}>Fotoğraf çek</Text>
+                  <Text style={styles.photoActionText} numberOfLines={1}>{t('form.photoTake')}</Text>
                 </Pressable>
                 <Pressable
                   style={({ pressed }) => [styles.photoActionBtn, pressed && styles.pressed]}
-                  onPress={() => choosePhoto(pickFromGallery, 'fotoğraflar')}
+                  onPress={() => choosePhoto(pickFromGallery, 'form.permissionPhotos')}
                   accessibilityRole="button"
-                  accessibilityLabel="Galeriden seç"
+                  accessibilityLabel={t('form.photoPick')}
                 >
-                  <Text style={styles.photoActionText}>Galeriden seç</Text>
+                  <Text style={styles.photoActionText} numberOfLines={1}>{t('form.photoPick')}</Text>
                 </Pressable>
               </View>
             </View>
@@ -141,7 +154,7 @@ export default function ItemFormScreen() {
             <Text style={styles.fieldLabel}>{copy.locLabel}</Text>
             {isLostCreate && formLocUnknown ? (
               <View style={styles.unknownLocBox}>
-                <Text style={styles.unknownLocText}>Konum bilinmiyor</Text>
+                <Text style={styles.unknownLocText}>{t('common.unknownLocation')}</Text>
               </View>
             ) : (
               <View style={styles.fieldRow}>
@@ -152,7 +165,7 @@ export default function ItemFormScreen() {
                     onFocus={() => setFocused('loc')}
                     onBlur={() => setFocused(null)}
                     onChangeText={setFormLoc}
-                    placeholder="Yatak odası, beyaz dolap, üst çekmece"
+                    placeholder={t('form.locPlaceholder')}
                     placeholderTextColor={colors.textSecondary}
                     style={styles.fieldInputLoc}
                     returnKeyType="done"
@@ -170,7 +183,7 @@ export default function ItemFormScreen() {
                 accessibilityState={{ checked: formLocUnknown }}
               >
                 <View style={[styles.checkbox, formLocUnknown && styles.checkboxOn]} />
-                <Text style={styles.unknownToggleText}>Hatırlamıyorum</Text>
+                <Text style={styles.unknownToggleText}>{t('form.dontRemember')}</Text>
               </Pressable>
             ) : null}
             {!isLostCreate || !formLocUnknown ? (
@@ -181,7 +194,7 @@ export default function ItemFormScreen() {
                     style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}
                     onPress={() => { haptics.light(); setFormLoc(s); }}
                     accessibilityRole="button"
-                    accessibilityLabel={`Konumu kullan: ${s}`}
+                    accessibilityLabel={t('form.suggestionA11y', { loc: s })}
                   >
                     <Text style={styles.suggestionText} numberOfLines={2}>{s}</Text>
                   </Pressable>
@@ -193,19 +206,19 @@ export default function ItemFormScreen() {
           {/* Colour and note are optional: they get a tighter rhythm so they
               never compete with name/location for attention. */}
           <View style={styles.secondaryGroup}>
-            <Text style={styles.fieldLabel}>Renk</Text>
+            <Text style={styles.fieldLabel}>{t('form.colorLabel')}</Text>
             <ColorPicker value={formColorKey} onChange={setFormColorKey} />
           </View>
 
           <Pressable onPress={() => setFormNoteOpen(!formNoteOpen)} style={styles.noteToggle}>
-            <Text style={styles.noteToggleText}>{formNoteOpen ? '− Notu kapat' : '+ Not ekle'}</Text>
+            <Text style={styles.noteToggleText}>{formNoteOpen ? t('form.noteClose') : t('form.noteAdd')}</Text>
           </Pressable>
           {formNoteOpen ? (
             <View style={styles.noteBox}>
               <TextInput
                 value={formNote}
                 onChangeText={setFormNote}
-                placeholder="Pasaportla birlikte eski vizeler de burada."
+                placeholder={t('form.notePlaceholder')}
                 placeholderTextColor={colors.textSecondary}
                 style={styles.noteInput}
                 multiline
@@ -218,7 +231,7 @@ export default function ItemFormScreen() {
 
         <View style={styles.footer}>
           <PrimaryButton
-            label={formSaving ? 'Kaydediliyor…' : copy.save}
+            label={formSaving ? t('form.saving') : copy.save}
             loading={formSaving}
             onPress={saveForm}
             disabled={!formValid || formSaving}
@@ -254,7 +267,10 @@ const styles = StyleSheet.create({
   // targets in the empty photo state, so they get the full minimum locally
   // instead of raising the shared compact height everywhere.
   photoActionBtn: {
-    minHeight: 44, justifyContent: 'center',
+    // flexShrink keeps the pair inside the card on a 320pt screen instead of
+    // pushing past it — the labels are short enough that it never actually
+    // engages at supported widths, it is just a hard stop against overflow.
+    minHeight: 44, justifyContent: 'center', flexShrink: 1,
     paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.lg - 1,
     borderRadius: radii.sm, backgroundColor: colors.card,
   },

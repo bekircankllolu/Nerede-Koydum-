@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { colors } from '../theme';
 import { ITEM_COLOR_ORDER, ITEM_COLORS, type ItemColorKey } from '../lib/colors';
+import { useI18n } from '../i18n/I18nProvider';
 
 export default function ColorPicker({
   value, onChange,
@@ -9,6 +10,7 @@ export default function ColorPicker({
   value: ItemColorKey;
   onChange: (key: ItemColorKey) => void;
 }) {
+  const { t } = useI18n();
   return (
     <View style={styles.row}>
       {ITEM_COLOR_ORDER.map((key) => {
@@ -19,7 +21,7 @@ export default function ColorPicker({
             key={key}
             onPress={() => onChange(key)}
             accessibilityRole="button"
-            accessibilityLabel={`Renk seç: ${key}`}
+            accessibilityLabel={t('form.colorA11y', { color: key })}
             style={styles.touchTarget}
           >
             <View style={[styles.ring, selected && styles.ringSelected]}>
