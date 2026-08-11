@@ -57,7 +57,9 @@ function Section({ label, rows }: { label?: string; rows: Row[] }) {
 }
 
 export default function SettingsScreen() {
-  const { isPro, openPaywall, openPrivacy, openHelp, exportCsv, deleteAllData, items } = useDepo();
+  const {
+    isPro, openPaywall, restorePro, restoring, openPrivacy, openHelp, exportCsv, deleteAllData, items,
+  } = useDepo();
 
   const onDeleteAll = () => {
     if (items.length === 0) {
@@ -80,7 +82,10 @@ export default function SettingsScreen() {
   const appRows: Row[] = [
     { label: 'Dil', value: 'Türkçe' },
     { label: 'Gizlilik', value: '', onPress: openPrivacy },
-    { label: 'Satın almayı geri yükle', value: '', onPress: openPaywall },
+    // Restoring is its own StoreKit call — it must not route through the
+    // purchase screen, or a returning user would have to look at a buy CTA
+    // to get back something they already paid for.
+    { label: 'Satın almayı geri yükle', value: restoring ? 'Yükleniyor…' : '', onPress: restorePro },
     { label: 'Yardım', value: '', onPress: openHelp },
   ];
   const aboutRows: Row[] = [
@@ -94,14 +99,27 @@ export default function SettingsScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Ayarlar</Text>
 
-      <Pressable style={styles.proCard} onPress={openPaywall}>
-        <Text style={styles.proTitle}>{isPro ? 'Depo Pro · etkin' : 'Depo Pro’ya geç'}</Text>
-        <Text style={styles.proSub}>
-          {isPro
-            ? 'Sınırsız eşya ve CSV dışa aktarma açık.'
-            : `${FREE_ITEM_LIMIT} eşya sınırını kaldır ve verilerini dışa aktar. Tek seferlik ödeme.`}
-        </Text>
-      </Pressable>
+      {/* Same surface either way, but an active Pro user has nothing left to
+          buy — the card becomes a plain status panel rather than a CTA that
+          leads back into the purchase screen. */}
+      {isPro ? (
+        <View style={styles.proCard}>
+          <Text style={styles.proTitle}>Depo Pro · etkin</Text>
+          <Text style={styles.proSub}>Sınırsız eşya ve CSV dışa aktarma açık.</Text>
+        </View>
+      ) : (
+        <Pressable
+          style={styles.proCard}
+          onPress={openPaywall}
+          accessibilityRole="button"
+          accessibilityLabel="Depo Pro’ya geç"
+        >
+          <Text style={styles.proTitle}>Depo Pro’ya geç</Text>
+          <Text style={styles.proSub}>
+            {`${FREE_ITEM_LIMIT} eşya sınırını kaldır ve verilerini dışa aktar. Tek seferlik ödeme.`}
+          </Text>
+        </Pressable>
+      )}
 
       <Section label="VERİLER" rows={dataRows} />
       <Section label="UYGULAMA" rows={appRows} />
