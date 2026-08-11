@@ -250,8 +250,11 @@ const styles = StyleSheet.create({
   photoBoxHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   photoBoxLabel: { ...typography.callout, color: colors.textWarm },
   photoActions: { flexDirection: 'row', gap: spacing.sm + 2 },
+  // 44 rather than controls.compactHeight (40): these are the only real tap
+  // targets in the empty photo state, so they get the full minimum locally
+  // instead of raising the shared compact height everywhere.
   photoActionBtn: {
-    minHeight: controls.compactHeight, justifyContent: 'center',
+    minHeight: 44, justifyContent: 'center',
     paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.lg - 1,
     borderRadius: radii.sm, backgroundColor: colors.card,
   },
