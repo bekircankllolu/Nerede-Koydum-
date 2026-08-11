@@ -320,7 +320,7 @@ export function useDepoStore() {
     // Check the free limit before copying anything, so a blocked save can't
     // leave an orphaned file behind.
     if (formMode === 'create' && !isPro && items.length >= FREE_ITEM_LIMIT) {
-      setPaywall(true);
+      openPaywall();
       return;
     }
 
@@ -730,7 +730,7 @@ export function useDepoStore() {
 
   async function exportCsv() {
     if (!isPro) {
-      setPaywall(true);
+      openPaywall();
       return;
     }
     const csv = itemsToCsv(items);
