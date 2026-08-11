@@ -124,7 +124,7 @@ export default function DetailScreen() {
             <Text style={styles.foundBtnText}>Buldum</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={onMarkLost} style={styles.markLostBtn} accessibilityRole="button" accessibilityLabel="Kayıp olarak işaretle">
+          <Pressable onPress={onMarkLost} style={styles.markLostBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Kayıp olarak işaretle">
             <Text style={styles.markLostText}>Kayıp olarak işaretle</Text>
           </Pressable>
         )}
@@ -152,7 +152,9 @@ export default function DetailScreen() {
           ))}
         </View>
 
-        <Pressable onPress={onDelete} style={styles.deleteBtn} accessibilityRole="button" accessibilityLabel="Kaydı sil">
+        {/* Text links keep their quiet padding and gain the rest through
+            slop, so the vertical rhythm of the screen is unchanged. */}
+        <Pressable onPress={onDelete} style={styles.deleteBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Kaydı sil">
           <Text style={styles.deleteText}>Kaydı sil</Text>
         </Pressable>
       </ScrollView>

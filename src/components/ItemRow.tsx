@@ -7,8 +7,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { colors, radii, spacing, surfaces, typography } from '../theme';
-import { itemColor, type ItemColorKey } from '../lib/colors';
+import { type ItemColorKey } from '../lib/colors';
 import { ChevronRight, StarIcon, TrashIcon } from './icons';
+import ItemAvatar from './ItemAvatar';
 import StatusBadge from './StatusBadge';
 
 // Callbacks take the row's id rather than closing over it, so screens can
@@ -20,6 +21,8 @@ type Props = {
   name: string;
   subtitle: string;
   onPress: (id: string) => void;
+  /** Shown as a cropped thumbnail in the avatar slot; falls back to `initial`. */
+  photoUri?: string | null;
   avatarSize?: number;
   /** Passive favourite marker on the row (not the swipe action). */
   showFavMark?: boolean;
@@ -79,12 +82,11 @@ function toRaw(effective: number): number {
 const openRow: { current: { id: object; close: () => void } | null } = { current: null };
 
 function ItemRow({
-  id, initial, name, subtitle, onPress, avatarSize = 48, showFavMark, rightLabel, rightLabelColor, showChevron,
+  id, initial, name, subtitle, onPress, photoUri, avatarSize = 48, showFavMark, rightLabel, rightLabelColor, showChevron,
   colorKey = 'indigo', lost, isFav, onToggleFav, onDeleteConfirm, onFullSwipeDelete,
 }: Props) {
   const swipeEnabled = !!(onToggleFav || onDeleteConfirm || onFullSwipeDelete);
   const canDelete = !!(onDeleteConfirm || onFullSwipeDelete);
-  const color = itemColor(colorKey);
 
   const rowId = useRef({}).current;
   const [removing, setRemoving] = useState(false);
@@ -314,14 +316,7 @@ function ItemRow({
       onPress={swipeEnabled ? onCardPress : onPlainPress}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <View
-        style={[
-          styles.avatar,
-          { width: avatarSize, height: avatarSize, borderRadius: avatarSize === 44 ? 12 : 13, backgroundColor: color.soft },
-        ]}
-      >
-        <Text style={[styles.avatarText, avatarSize === 44 && { fontSize: 17 }, { color: color.strong }]}>{initial}</Text>
-      </View>
+      <ItemAvatar initial={initial} colorKey={colorKey} photoUri={photoUri} size={avatarSize} />
       <View style={styles.textCol}>
         <View style={styles.nameRow}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
@@ -411,12 +406,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   rowPressed: { backgroundColor: colors.cardPressed },
-  avatar: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  avatarText: { fontWeight: '700', fontSize: 18 },
   textCol: { flex: 1, minWidth: 0, gap: 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 },
   name: { ...typography.bodyStrong, color: colors.textPrimary, flexShrink: 1 },

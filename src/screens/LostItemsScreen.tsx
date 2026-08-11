@@ -30,6 +30,7 @@ export default function LostItemsScreen() {
         name={c.name}
         subtitle={c.fullLoc}
         onPress={openItem}
+        photoUri={c.photoUri}
         rightLabel={lostAgeLabel(item, now)}
         rightLabelColor={colors.lost}
         colorKey={c.colorKey}
@@ -46,6 +47,9 @@ export default function LostItemsScreen() {
       </View>
       <Pressable
         onPress={openLostForm}
+        // 36pt pill + 4 of slop top and bottom = 44pt, with the header's
+        // alignment left exactly as it was.
+        hitSlop={{ top: 4, bottom: 4 }}
         style={({ pressed }) => [styles.reportBtn, pressed && styles.reportBtnPressed]}
         accessibilityRole="button"
         accessibilityLabel="Kayıp bildir"
