@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, controls, radii, spacing, typography, FREE_ITEM_LIMIT } from '../theme';
 import { useDepo } from '../state/DepoContext';
@@ -15,7 +15,18 @@ const FEATURES = [
 ];
 
 export default function PaywallScreen() {
-  const { closePaywall, buyPro, restorePro } = useDepo();
+  const {
+    closePaywall, buyPro, restorePro, offeringStatus, lifetimePackage, purchasing, restoring,
+  } = useDepo();
+
+  // Never falls back to the old hard-coded ₺299 — a stale price is worse
+  // than a loading state, and the buy button stays disabled until this is
+  // the Store's own localized string.
+  const priceLabel = lifetimePackage
+    ? `${lifetimePackage.product.priceString} · tek seferlik`
+    : offeringStatus === 'error' ? 'Fiyat şu anda alınamıyor'
+    : 'Fiyat yükleniyor…';
+  const buyDisabled = !lifetimePackage || purchasing || restoring;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -42,21 +53,37 @@ export default function PaywallScreen() {
 
       <View style={styles.buyGroup}>
         <Pressable
-          style={({ pressed }) => [styles.buyBtn, pressed && styles.buyBtnPressed]}
-          onPress={buyPro}
+          style={({ pressed }) => [
+            styles.buyBtn, pressed && !buyDisabled && styles.buyBtnPressed, buyDisabled && styles.buyBtnDisabled,
+          ]}
+          onPress={buyDisabled ? undefined : buyPro}
+          disabled={buyDisabled}
           accessibilityRole="button"
           accessibilityLabel="Ömür Boyu Pro satın al"
+          accessibilityState={{ disabled: buyDisabled, busy: purchasing }}
         >
-          <Text style={styles.buyTitle}>Ömür Boyu Pro</Text>
-          <Text style={styles.buySub}>₺299 · tek seferlik</Text>
+          {purchasing ? (
+            <ActivityIndicator color="#fff" style={styles.buySpinner} />
+          ) : (
+            <>
+              <Text style={styles.buyTitle}>Ömür Boyu Pro</Text>
+              <Text style={styles.buySub}>{priceLabel}</Text>
+            </>
+          )}
         </Pressable>
         <Pressable
-          onPress={restorePro}
+          onPress={purchasing || restoring ? undefined : restorePro}
+          disabled={purchasing || restoring}
           style={styles.restoreBtn}
           accessibilityRole="button"
           accessibilityLabel="Satın almayı geri yükle"
+          accessibilityState={{ busy: restoring }}
         >
-          <Text style={styles.restoreText}>Satın almayı geri yükle</Text>
+          {restoring ? (
+            <ActivityIndicator color="rgba(255,255,255,0.62)" size="small" />
+          ) : (
+            <Text style={styles.restoreText}>Satın almayı geri yükle</Text>
+          )}
         </Pressable>
       </View>
     </SafeAreaView>
@@ -90,4 +117,8 @@ const styles = StyleSheet.create({
   featureList: { gap: spacing.md - 1 },
   buyGroup: { gap: spacing.md },
   buyBtnPressed: { opacity: 0.9 },
+  // Same button, same height — no layout shift while the offering loads or
+  // a purchase is in flight, only the opacity signals "not tappable yet".
+  buyBtnDisabled: { opacity: 0.5 },
+  buySpinner: { height: 22 },
 });
