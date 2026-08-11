@@ -3,6 +3,8 @@ import React, {
 } from 'react';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import Purchases from 'react-native-purchases';
+import type { CustomerInfo, PurchasesPackage } from 'react-native-purchases';
 import { haptics } from '../lib/haptics';
 import { deleteManagedPhoto, isManagedPhoto, persistPhoto } from '../lib/photoStorage';
 import * as db from '../db';
@@ -12,6 +14,11 @@ import { itemsToCsv } from '../lib/csv';
 import { useVoiceRecognition } from '../lib/voice';
 import { colors, FREE_ITEM_LIMIT } from '../theme';
 import { DEFAULT_ITEM_COLOR, type ItemColorKey } from '../lib/colors';
+import {
+  configureRevenueCat, fetchCustomerInfoSafe, findLifetimePackage, getCurrentOffering,
+  isAlreadyPurchasedError, isCancelledError, isEntitlementActive, isRevenueCatAvailable,
+  purchaseErrorMessage, PURCHASES_UNAVAILABLE_MESSAGE,
+} from '../lib/revenueCat';
 
 export type FilterKey = 'all' | 'recent' | 'fav' | 'nophoto' | 'loc';
 export type VoiceTarget = 'search' | 'name' | 'loc' | 'move' | null;
@@ -93,6 +100,13 @@ export function useDepoStore() {
 
   const [voiceTarget, setVoiceTarget] = useState<VoiceTarget>(null);
   const [paywall, setPaywall] = useState(false);
+  // Store offering, loaded fresh each time the paywall opens so the price
+  // shown is never stale. RevenueCat — not this state, not app_meta — is the
+  // only thing that ever decides `isPro`.
+  const [offeringStatus, setOfferingStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [lifetimePackage, setLifetimePackage] = useState<PurchasesPackage | null>(null);
+  const [purchasing, setPurchasing] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [privacyOpen, setPrivacyOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
@@ -104,18 +118,40 @@ export function useDepoStore() {
   const voice = useVoiceRecognition();
 
   useEffect(() => {
+    configureRevenueCat();
     (async () => {
       await db.initDb();
-      const [loaded, hasOnboarded, proFlag] = await Promise.all([
+      // The item-tracking half of the app boots off local SQLite alone —
+      // this never waits on RevenueCat, so a slow or unreachable network
+      // never delays opening to the user's own data.
+      const [loaded, hasOnboarded] = await Promise.all([
         db.listItems(),
         db.getMeta('hasOnboarded'),
-        db.getMeta('isPro'),
       ]);
       setItems(loaded);
       setShowOnboarding(!hasOnboarded);
-      setIsPro(proFlag === '1');
       setBooting(false);
     })();
+    // Resolved independently, in parallel. `fetchCustomerInfoSafe` never
+    // throws and defaults to null on any failure, so `isPro` simply stays at
+    // its `false` initial value rather than ever defaulting to true.
+    fetchCustomerInfoSafe().then((info) => {
+      if (info) setIsPro(isEntitlementActive(info));
+    });
+  }, []);
+
+  // Entitlement changes (a purchase completing elsewhere, a renewal, a
+  // refund) flow back through this listener rather than only through the
+  // explicit purchase/restore calls below. Registered once for the life of
+  // the app — the empty dependency array is what prevents a duplicate
+  // registration on re-render.
+  useEffect(() => {
+    if (!isRevenueCatAvailable()) return;
+    const listener = (info: CustomerInfo) => setIsPro(isEntitlementActive(info));
+    Purchases.addCustomerInfoUpdateListener(listener);
+    return () => {
+      Purchases.removeCustomerInfoUpdateListener(listener);
+    };
   }, []);
 
   const flash = useCallback((title: string, body: string, action?: ToastAction) => {
@@ -556,23 +592,108 @@ export function useDepoStore() {
     if (openAddAfter) openAddForm();
   }
 
+  // Fetched fresh on every open rather than cached across the app's
+  // lifetime, so a price change or a newly-fixed offering in the dashboard
+  // shows up without requiring a relaunch.
+  const loadOffering = useCallback(async () => {
+    if (!isRevenueCatAvailable()) {
+      setOfferingStatus('error');
+      return;
+    }
+    setOfferingStatus('loading');
+    try {
+      const offering = await getCurrentOffering();
+      const pkg = findLifetimePackage(offering);
+      if (!pkg) {
+        setLifetimePackage(null);
+        setOfferingStatus('error');
+        return;
+      }
+      setLifetimePackage(pkg);
+      setOfferingStatus('ready');
+    } catch (err) {
+      if (__DEV__) console.warn('[loadOffering] failed', err);
+      setLifetimePackage(null);
+      setOfferingStatus('error');
+    }
+  }, []);
+
   function openPaywall() {
     setPaywall(true);
+    loadOffering();
   }
   function closePaywall() {
     setPaywall(false);
   }
+
   async function buyPro() {
-    setIsPro(true);
-    await db.setMeta('isPro', '1');
-    setPaywall(false);
-    flash('Pro etkin.', 'Artık sınırsız eşya kaydedebilirsin.');
+    // The button is disabled in these states too — this guard is what
+    // actually stops a double tap from starting two purchases.
+    if (purchasing || restoring || !lifetimePackage) return;
+    setPurchasing(true);
+    try {
+      const result = await Purchases.purchasePackage(lifetimePackage);
+      if (isEntitlementActive(result.customerInfo)) {
+        setIsPro(true);
+        setPaywall(false);
+        haptics.success();
+        flash('Depo Pro etkin.', 'Artık sınırsız eşya kaydedebilirsin.');
+      } else {
+        // The store reported success but RevenueCat's own entitlement check
+        // disagrees — never claim success on the strength of the former.
+        flash('Satın alma tamamlanamadı.', 'Tekrar deneyebilirsin.');
+      }
+    } catch (err) {
+      if (isCancelledError(err)) {
+        // The user closing Apple's sheet is not an error: no toast, no
+        // alert, the paywall just stays open with its loading state cleared.
+      } else if (isAlreadyPurchasedError(err)) {
+        const info = await fetchCustomerInfoSafe();
+        if (info && isEntitlementActive(info)) {
+          setIsPro(true);
+          setPaywall(false);
+          flash('Depo Pro zaten etkin.', 'Tekrar ödeme yapmana gerek yok.');
+        } else {
+          const { title, body } = purchaseErrorMessage(err);
+          flash(title, body);
+        }
+      } else {
+        if (__DEV__) console.error('[buyPro] purchase failed', err);
+        const { title, body } = purchaseErrorMessage(err);
+        flash(title, body);
+      }
+    } finally {
+      setPurchasing(false);
+    }
   }
+
+  // Always a user-initiated action — never called automatically at boot,
+  // since fetchCustomerInfoSafe() already covers that check.
   async function restorePro() {
-    setIsPro(true);
-    await db.setMeta('isPro', '1');
-    setPaywall(false);
-    flash('Satın alma geri yüklendi.', 'Depo Pro yeniden etkin.');
+    if (purchasing || restoring) return;
+    if (!isRevenueCatAvailable()) {
+      flash(PURCHASES_UNAVAILABLE_MESSAGE.title, PURCHASES_UNAVAILABLE_MESSAGE.body);
+      return;
+    }
+    setRestoring(true);
+    try {
+      const info = await Purchases.restorePurchases();
+      if (isEntitlementActive(info)) {
+        setIsPro(true);
+        setPaywall(false);
+        haptics.success();
+        flash('Satın alma geri yüklendi.', 'Depo Pro yeniden etkin.');
+      } else {
+        setIsPro(false);
+        flash('Geri yüklenecek satın alma bulunamadı.', 'Bu hesapta önceden yapılmış bir satın alma yok.');
+      }
+    } catch (err) {
+      if (__DEV__) console.error('[restorePro] restore failed', err);
+      const { title, body } = purchaseErrorMessage(err);
+      flash(title, body);
+    } finally {
+      setRestoring(false);
+    }
   }
 
   function openPrivacy() {
@@ -803,6 +924,10 @@ export function useDepoStore() {
     paywall,
     openPaywall,
     closePaywall,
+    offeringStatus,
+    lifetimePackage,
+    purchasing,
+    restoring,
     buyPro,
     restorePro,
 
