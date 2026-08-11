@@ -619,6 +619,10 @@ export function useDepoStore() {
   }, []);
 
   function openPaywall() {
+    // Last line of defence: every current caller already checks `isPro`, but
+    // a future entry point that forgets must still never show a purchase
+    // screen to someone who has already bought.
+    if (isPro) return;
     setPaywall(true);
     loadOffering();
   }
