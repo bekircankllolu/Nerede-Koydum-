@@ -127,7 +127,9 @@ export default function ItemsScreen() {
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Konuma göre filtrele</Text>
-              <Pressable onPress={closeLocFilterSheet} hitSlop={8} accessibilityRole="button" accessibilityLabel="Kapat">
+              {/* The glyph is 17pt, so 14 of slop on each side clears 44pt
+                  while leaving the header's alignment untouched. */}
+              <Pressable onPress={closeLocFilterSheet} hitSlop={14} accessibilityRole="button" accessibilityLabel="Kapat">
                 <CloseIcon />
               </Pressable>
             </View>

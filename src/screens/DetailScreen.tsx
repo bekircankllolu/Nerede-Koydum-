@@ -51,10 +51,12 @@ export default function DetailScreen() {
   return (
     <AnimatedSafeArea style={styles.root} edges={['top', 'bottom']} entering={entering}>
       <View style={styles.header}>
-        <Pressable onPress={closeDetail} hitSlop={8}>
+        {/* hitSlop rather than a taller Pressable: the label is ~22pt, so 12
+            on each side clears 44pt without growing the header. */}
+        <Pressable onPress={closeDetail} hitSlop={12} accessibilityRole="button" accessibilityLabel="Geri">
           <Text style={styles.back}>‹ Geri</Text>
         </Pressable>
-        <Pressable onPress={openEditForm} hitSlop={8} accessibilityRole="button" accessibilityLabel="Eşyayı düzenle">
+        <Pressable onPress={openEditForm} hitSlop={12} accessibilityRole="button" accessibilityLabel="Eşyayı düzenle">
           <Text style={styles.edit}>Düzenle</Text>
         </Pressable>
       </View>
