@@ -88,6 +88,7 @@ export default function FindScreen() {
                     name={c.name}
                     subtitle={c.shortLoc}
                     onPress={openItem}
+                    photoUri={c.photoUri}
                     avatarSize={44}
                     showChevron
                     colorKey={c.colorKey}
@@ -105,7 +106,13 @@ export default function FindScreen() {
               <Pressable style={styles.noResultsCta} onPress={createFromQuery}>
                 <Text style={styles.noResultsCtaText}>“{q.trim()}” eşya olarak kaydet</Text>
               </Pressable>
-              <Pressable style={styles.noResultsLostCta} onPress={openLostForm}>
+              <Pressable
+                style={styles.noResultsLostCta}
+                onPress={openLostForm}
+                hitSlop={9}
+                accessibilityRole="button"
+                accessibilityLabel="Kayıp bildir"
+              >
                 <Text style={styles.noResultsLostCtaText}>Kayıp mı? Kayıp bildir</Text>
               </Pressable>
             </View>
@@ -125,13 +132,21 @@ export default function FindScreen() {
             </Pressable>
           </View>
 
-          <Pressable style={styles.lostLink} onPress={openLostForm}>
+          <Pressable
+            style={styles.lostLink}
+            onPress={openLostForm}
+            hitSlop={9}
+            accessibilityRole="button"
+            accessibilityLabel="Kayıp bildir"
+          >
             <Text style={styles.lostLinkText}>Bir şey mi kaybettin? Kayıp bildir</Text>
           </Pressable>
 
           <View style={styles.recentHeader}>
             <Text style={styles.sectionLabel}>Son kayıtlar</Text>
-            <Pressable onPress={goItems}>
+            {/* 13pt text is ~18pt tall; 13 of slop on each side clears 44pt
+                without moving the baseline it is aligned to. */}
+            <Pressable onPress={goItems} hitSlop={13} accessibilityRole="button" accessibilityLabel="Bütün eşyaları gör">
               <Text style={styles.recentAll}>Tümü</Text>
             </Pressable>
           </View>
@@ -146,6 +161,7 @@ export default function FindScreen() {
                   name={c.name}
                   subtitle={c.shortLoc}
                   onPress={openItem}
+                  photoUri={c.photoUri}
                   rightLabel={c.ago}
                   showFavMark={c.fav}
                   colorKey={c.colorKey}

@@ -7,13 +7,14 @@ import { haptics } from '../lib/haptics';
 import ItemRow from '../components/ItemRow';
 import EmptyState from '../components/EmptyState';
 import { IconButton } from '../components/common';
-import { PlusIcon, CloseIcon, TabItemsIcon } from '../components/icons';
+import { PlusIcon, CloseIcon, HistoryIcon, TabItemsIcon } from '../components/icons';
 
 export default function ItemsScreen() {
   const {
     storedItems, listed, filter, setFilter, filterDefs, card, isPro, accent,
     openItem, toggleFavById, deleteItemById, deleteItemByIdWithUndo, openAddForm,
     selectedLoc, locationOptions, locFilterOpen, openLocFilterSheet, closeLocFilterSheet, chooseLocFilter,
+    openHistory,
   } = useDepo();
   // Free users get the limit inline rather than as a trailing sentence:
   // "8 / 20 eşya" reads in a glance where the old copy did not.
@@ -41,6 +42,7 @@ export default function ItemsScreen() {
         name={c.name}
         subtitle={c.fullLoc}
         onPress={openItem}
+        photoUri={c.photoUri}
         showFavMark={c.fav}
         showChevron
         colorKey={c.colorKey}
@@ -59,9 +61,22 @@ export default function ItemsScreen() {
           <Text style={styles.title}>Eşyalar</Text>
           <Text style={styles.count}>{countLabel}</Text>
         </View>
-        <IconButton onPress={openAddForm} bg={colors.indigo} accessibilityLabel="Yeni eşya ekle">
-          <PlusIcon size={18} />
-        </IconButton>
+        {/* Both are the shared 44pt icon button. The history one stays on the
+            calm card surface so the indigo add button remains the single
+            primary action in this header. */}
+        <View style={styles.headerActions}>
+          <IconButton
+            onPress={openHistory}
+            bg={colors.card}
+            style={styles.historyBtn}
+            accessibilityLabel="Geçmişi aç"
+          >
+            <HistoryIcon size={19} color={colors.textSecondary} />
+          </IconButton>
+          <IconButton onPress={openAddForm} bg={colors.indigo} accessibilityLabel="Yeni eşya ekle">
+            <PlusIcon size={18} />
+          </IconButton>
+        </View>
       </View>
 
       {storedItems.length === 0 ? (
@@ -89,6 +104,11 @@ export default function ItemsScreen() {
                 <Pressable
                   key={f.key}
                   onPress={() => onChipPress(f.key)}
+                  // Vertical only: horizontal slop would overlap the
+                  // neighbouring chip, which sits just 8pt away.
+                  hitSlop={{ top: 5, bottom: 5 }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
                   style={({ pressed }) => [
                     styles.chip,
                     { backgroundColor: on ? accent : colors.neutralChip, opacity: pressed ? 0.85 : 1 },
@@ -164,6 +184,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: spacing.xl },
   header: { paddingTop: spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   headerText: { flex: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // A hairline keeps the white button legible against the warm background
+  // without adding a shadow to the header.
+  historyBtn: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairlineStrong },
   title: { ...typography.largeTitle, color: colors.textPrimary, marginBottom: spacing.xs },
   count: { ...typography.subheadline, color: colors.textSecondary },
   filterScroll: { flexGrow: 0, flexShrink: 0, marginTop: spacing.lg },

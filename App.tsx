@@ -14,6 +14,7 @@ import LostItemsScreen from './src/screens/LostItemsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import DetailScreen from './src/screens/DetailScreen';
+import HistoryScreen from './src/screens/HistoryScreen';
 import ItemFormScreen from './src/screens/ItemFormScreen';
 import MoveSheet from './src/screens/MoveSheet';
 import FoundSheet from './src/screens/FoundSheet';
@@ -25,7 +26,7 @@ import HelpScreen from './src/screens/HelpScreen';
 function Root() {
   const {
     booting, screen, showOnboarding, selected, formOpen, moveOpen, foundSheetOpen,
-    voiceTarget, paywall, privacyOpen, helpOpen,
+    voiceTarget, paywall, privacyOpen, helpOpen, historyOpen,
   } = useDepo();
 
   if (booting) {
@@ -50,6 +51,10 @@ function Root() {
         <TabBar />
       </SafeAreaView>
 
+      {/* Ordered by stacking depth: history sits above the tabs but below
+          detail, so opening an item from the timeline and going back lands
+          on the timeline again. */}
+      {historyOpen && <HistoryScreen />}
       {selected && <DetailScreen />}
       {formOpen && <ItemFormScreen />}
       {moveOpen && <MoveSheet />}

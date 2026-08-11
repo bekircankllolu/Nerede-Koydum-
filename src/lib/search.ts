@@ -142,7 +142,7 @@ export function initialOf(name: string): string {
   return (name.charAt(0) || '?').toLocaleUpperCase('tr');
 }
 
-const MONTHS_TR = [
+export const MONTHS_TR = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ];

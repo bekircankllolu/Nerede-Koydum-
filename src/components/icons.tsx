@@ -137,6 +137,24 @@ export function TrashIcon({ size = 22, color = '#fff' }: IconProps) {
   );
 }
 
+// Clock face with a counter-clockwise arrow — the same 24-unit grid, 2pt
+// round-capped stroke language as the tab icons.
+export function HistoryIcon({ size = 19, color = '#6E6E73' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M9.1 4 A 8.5 8.5 0 1 1 3.5 12"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M1.3 14.2L3.5 12l2.2 2.2" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M12 7.8V12l3.4 1.9" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function PencilIcon({ size = 18, color = '#5556D9' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

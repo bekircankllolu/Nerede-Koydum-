@@ -63,6 +63,10 @@ export function useDepoStore() {
   const [selectedLoc, setSelectedLoc] = useState<string | null>(null);
   const [locFilterOpen, setLocFilterOpen] = useState(false);
   const [selId, setSelId] = useState<string | null>(null);
+  // Full-screen "Geçmiş" timeline, opened from the Items header rather than
+  // a fifth tab. Detail sits above it, so tapping a row and coming back
+  // returns to the timeline where the user left it.
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Unified add / edit / lost-report form state.
   const [formOpen, setFormOpen] = useState(false);
@@ -133,6 +137,7 @@ export function useDepoStore() {
     setFoundSheetOpen(false);
     setFoundLocVal('');
     setLocFilterOpen(false);
+    setHistoryOpen(false);
     setSelId(null);
     setPaywall(false);
     setPrivacyOpen(false);
@@ -170,6 +175,7 @@ export function useDepoStore() {
       shortLoc: it.status === 'lost' ? (it.loc ? shortLoc(it.loc) : db.UNKNOWN_LOCATION) : shortLoc(it.loc),
       fullLoc: it.loc ? fullLoc(it.loc) : db.UNKNOWN_LOCATION,
       fav: it.fav,
+      photoUri: it.photoUri,
       ago: formatAgo(it.updatedAt, now),
       colorKey: it.colorKey,
       lost: it.status === 'lost',
@@ -633,6 +639,13 @@ export function useDepoStore() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
   }, [storedItems]);
 
+  function openHistory() {
+    setHistoryOpen(true);
+  }
+  function closeHistory() {
+    setHistoryOpen(false);
+  }
+
   function openLocFilterSheet() {
     setLocFilterOpen(true);
   }
@@ -716,6 +729,9 @@ export function useDepoStore() {
     openLocFilterSheet,
     closeLocFilterSheet,
     chooseLocFilter,
+    historyOpen,
+    openHistory,
+    closeHistory,
 
     items,
     storedItems,
