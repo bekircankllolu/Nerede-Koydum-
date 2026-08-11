@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { colors, controls, motion, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
 import { PrimaryButton, SecondaryButton } from '../components/common';
 import { PhotoIcon, StarIcon } from '../components/icons';
 import { photoFileExists } from '../lib/photoStorage';
@@ -14,6 +15,7 @@ export default function DetailScreen() {
   const {
     detail, closeDetail, toggleFav, openMove, confirmLoc, deleteItem, openEditForm, markLost, openFoundSheet,
   } = useDepo();
+  const { t } = useI18n();
   const reduced = useReducedMotion();
   // A stored photo whose file has gone missing must degrade to a placeholder
   // rather than rendering a broken image or crashing the screen.
@@ -31,19 +33,19 @@ export default function DetailScreen() {
   const showPhoto = !!d.item.photoUri && !photoBroken && !photoMissing;
 
   const onDelete = () => {
-    Alert.alert('Bu kaydı silmek istediğine emin misin?', d.name + ' kalıcı olarak silinecek.', [
-      { text: 'Vazgeç', style: 'cancel' },
-      { text: 'Sil', style: 'destructive', onPress: deleteItem },
+    Alert.alert(t('detail.deleteConfirmTitle'), t('detail.deleteConfirmBody', { name: d.name }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('detail.deleteConfirmCta'), style: 'destructive', onPress: deleteItem },
     ]);
   };
 
   const onMarkLost = () => {
     Alert.alert(
-      `${d.name}'i kayıp olarak işaretlemek istiyor musun?`,
-      'Son bilinen konumu Kayıplar bölümünde saklarız.',
+      t('detail.markLostConfirmTitle', { name: d.name }),
+      t('detail.markLostConfirmBody'),
       [
-        { text: 'Vazgeç', style: 'cancel' },
-        { text: 'Kayıp olarak işaretle', style: 'destructive', onPress: markLost },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('detail.markLost'), style: 'destructive', onPress: markLost },
       ]
     );
   };
@@ -53,11 +55,11 @@ export default function DetailScreen() {
       <View style={styles.header}>
         {/* hitSlop rather than a taller Pressable: the label is ~22pt, so 12
             on each side clears 44pt without growing the header. */}
-        <Pressable onPress={closeDetail} hitSlop={12} accessibilityRole="button" accessibilityLabel="Geri">
-          <Text style={styles.back}>‹ Geri</Text>
+        <Pressable onPress={closeDetail} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.backA11y')}>
+          <Text style={styles.back} numberOfLines={1}>{t('common.back')}</Text>
         </Pressable>
-        <Pressable onPress={openEditForm} hitSlop={12} accessibilityRole="button" accessibilityLabel="Eşyayı düzenle">
-          <Text style={styles.edit}>Düzenle</Text>
+        <Pressable onPress={openEditForm} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('detail.editA11y')}>
+          <Text style={styles.edit} numberOfLines={1}>{t('detail.edit')}</Text>
         </Pressable>
       </View>
 
@@ -73,7 +75,7 @@ export default function DetailScreen() {
           <View style={styles.photoPlaceholder}>
             <PhotoIcon size={22} />
             <Text style={styles.photoPlaceholderText}>
-              {d.item.photoUri ? 'Fotoğraf kullanılamıyor' : 'Fotoğraf eklenmedi'}
+              {d.item.photoUri ? t('detail.photoUnavailable') : t('detail.photoNone')}
             </Text>
           </View>
         )}
@@ -85,14 +87,14 @@ export default function DetailScreen() {
             hitSlop={10}
             style={styles.favBtn}
             accessibilityRole="button"
-            accessibilityLabel={d.item.fav ? 'Favorilerden çıkar' : 'Favoriye ekle'}
+            accessibilityLabel={d.item.fav ? t('detail.favRemove') : t('detail.favAdd')}
           >
             <StarIcon size={24} color={d.item.fav ? colors.favorite : colors.textTertiary} filled={d.item.fav} />
           </Pressable>
         </View>
 
         <View style={styles.locCard}>
-          <Text style={styles.locLabel}>{d.isLost ? 'Son bilinen konum' : 'Bulunduğu yer'}</Text>
+          <Text style={styles.locLabel}>{d.isLost ? t('detail.locLabelLost') : t('detail.locLabelStored')}</Text>
           <View style={styles.locLines}>
             <Text style={styles.locPrimary}>{d.lines[0]}</Text>
             {d.lines.length > 1 ? (
@@ -103,14 +105,17 @@ export default function DetailScreen() {
             <Text style={styles.lostLine}>{d.lostDaysLabel}</Text>
           ) : (
             <Text style={d.stale ? styles.confirmedStale : styles.confirmed}>
-              {d.stale ? `${d.confirmed.replace(/\.$/, '')} · Hâlâ burada mı?` : d.confirmed}
+              {d.stale
+                ? t('detail.staleSuffix', { confirmed: d.confirmed.replace(/\.$/, '') })
+                : d.confirmed}
             </Text>
           )}
           {!d.isLost ? (
             <View style={styles.locActions}>
-              <PrimaryButton label="Yerini değiştir" onPress={openMove} style={{ flex: 1, height: 52 }} />
+              <PrimaryButton label={t('detail.move')} onPress={openMove} style={{ flex: 1, height: 52 }} />
               <SecondaryButton
-                label="Konumu doğrula"
+                label={t('detail.confirmLoc')}
+                accessibilityLabel={t('detail.confirmLocA11y')}
                 onPress={confirmLoc}
                 style={d.stale ? styles.confirmBtnStale : styles.confirmBtn}
                 textColor={d.stale ? '#fff' : undefined}
@@ -120,27 +125,27 @@ export default function DetailScreen() {
         </View>
 
         {d.isLost ? (
-          <Pressable style={styles.foundBtn} onPress={openFoundSheet} accessibilityRole="button" accessibilityLabel="Buldum">
-            <Text style={styles.foundBtnText}>Buldum</Text>
+          <Pressable style={styles.foundBtn} onPress={openFoundSheet} accessibilityRole="button" accessibilityLabel={t('detail.found')}>
+            <Text style={styles.foundBtnText} numberOfLines={1}>{t('detail.found')}</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={onMarkLost} style={styles.markLostBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Kayıp olarak işaretle">
-            <Text style={styles.markLostText}>Kayıp olarak işaretle</Text>
+          <Pressable onPress={onMarkLost} style={styles.markLostBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel={t('detail.markLost')}>
+            <Text style={styles.markLostText}>{t('detail.markLost')}</Text>
           </Pressable>
         )}
 
         {d.note ? (
           <View style={styles.noteCard}>
-            <Text style={styles.noteLabel}>NOT</Text>
+            <Text style={styles.noteLabel}>{t('detail.noteLabel')}</Text>
             <Text style={styles.noteText}>{d.note}</Text>
           </View>
         ) : null}
 
-        <Text style={styles.historyLabel}>Geçmiş</Text>
+        <Text style={styles.historyLabel}>{t('detail.historyLabel')}</Text>
         <View style={styles.historyCard}>
           {d.history.length === 0 ? (
             <View style={styles.historyRow}>
-              <Text style={styles.historyEmpty}>Henüz konum geçmişi yok.</Text>
+              <Text style={styles.historyEmpty}>{t('detail.historyEmpty')}</Text>
             </View>
           ) : null}
           {d.history.map((h, i) => (
@@ -154,8 +159,8 @@ export default function DetailScreen() {
 
         {/* Text links keep their quiet padding and gain the rest through
             slop, so the vertical rhythm of the screen is unchanged. */}
-        <Pressable onPress={onDelete} style={styles.deleteBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel="Kaydı sil">
-          <Text style={styles.deleteText}>Kaydı sil</Text>
+        <Pressable onPress={onDelete} style={styles.deleteBtn} hitSlop={6} accessibilityRole="button" accessibilityLabel={t('detail.deleteRecord')}>
+          <Text style={styles.deleteText}>{t('detail.deleteRecord')}</Text>
         </Pressable>
       </ScrollView>
     </AnimatedSafeArea>

@@ -2,7 +2,9 @@ import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, controls, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
 import { daysBetween } from '../lib/search';
+import { isUnknownLocation } from '../lib/location';
 import { PrimaryButton, MicButton } from '../components/common';
 import ItemRow from '../components/ItemRow';
 import StatusBadge from '../components/StatusBadge';
@@ -13,6 +15,7 @@ export default function FindScreen() {
     q, setQ, results, card, startVoice, recent, goItems, openAddForm, openLostForm, createFromQuery,
     toggleFavById, deleteItemById, deleteItemByIdWithUndo, openItem,
   } = useDepo();
+  const { t } = useI18n();
 
   const now = Date.now();
   const hasQuery = q.trim().length > 0;
@@ -20,10 +23,17 @@ export default function FindScreen() {
   const others = results.length > 1 ? results.slice(1, 4) : [];
   const noResults = hasQuery && results.length === 0;
   const bestLost = best?.status === 'lost';
+  // The breadcrumb is the user's own text, so it is shown verbatim; only the
+  // "no location saved" placeholder comes from the translation layer.
+  const bestLines = !best
+    ? []
+    : isUnknownLocation(best.loc)
+      ? [t('common.unknownLocation')]
+      : best.loc.split(' / ');
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>Neyi arıyorsun?</Text>
+      <Text style={styles.title}>{t('find.title')}</Text>
 
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
@@ -31,7 +41,7 @@ export default function FindScreen() {
           <TextInput
             value={q}
             onChangeText={setQ}
-            placeholder="Pasaport, anahtar, şarj aleti…"
+            placeholder={t('find.searchPlaceholder')}
             placeholderTextColor={colors.textSecondary}
             style={styles.searchInput}
           />
@@ -40,7 +50,7 @@ export default function FindScreen() {
               onPress={() => setQ('')}
               style={styles.clearBtn}
               accessibilityRole="button"
-              accessibilityLabel="Aramayı temizle"
+              accessibilityLabel={t('find.clearSearchA11y')}
             >
               <CloseIcon size={16} />
             </Pressable>
@@ -54,30 +64,32 @@ export default function FindScreen() {
           {best ? (
             <View style={styles.bestCard}>
               <View style={styles.bestLabelRow}>
-                <Text style={styles.bestLabel}>En iyi sonuç</Text>
+                <Text style={styles.bestLabel}>{t('find.bestResult')}</Text>
                 {bestLost ? <StatusBadge /> : null}
               </View>
               <Text style={styles.bestName}>{best.name}</Text>
-              {bestLost ? <Text style={styles.bestSubLabel}>Son görüldüğü yer</Text> : null}
+              {bestLost ? <Text style={styles.bestSubLabel}>{t('find.lastSeen')}</Text> : null}
               <View style={{ gap: 2 }}>
-                {(best.loc ? best.loc.split(' / ') : ['Konum bilinmiyor']).map((line, i) => (
+                {bestLines.map((line, i) => (
                   <Text key={i} style={styles.bestLine}>{line}</Text>
                 ))}
               </View>
               {bestLost ? (
                 <Text style={styles.bestLostLine}>
-                  {best.lostAt ? `${Math.max(0, daysBetween(best.lostAt, now))} gündür kayıp` : 'Kayıp'}
+                  {best.lostAt
+                    ? t('detail.lostDays', { count: Math.max(0, daysBetween(best.lostAt, now)) })
+                    : t('find.lostFallback')}
                 </Text>
               ) : (
-                <Text style={styles.bestConfirmed}>{card(best).ago} doğrulandı.</Text>
+                <Text style={styles.bestConfirmed}>{t('find.confirmedAgo', { ago: card(best).ago })}</Text>
               )}
-              <PrimaryButton label="Kaydı aç" onPress={() => card(best).open()} style={{ marginTop: 2 }} />
+              <PrimaryButton label={t('find.openRecord')} onPress={() => card(best).open()} style={{ marginTop: 2 }} />
             </View>
           ) : null}
 
           {others.length ? (
             <View style={{ marginTop: 22, gap: 10 }}>
-              <Text style={styles.sectionLabel}>Diğer sonuçlar</Text>
+              <Text style={styles.sectionLabel}>{t('find.otherResults')}</Text>
               {others.map((it) => {
                 const c = card(it);
                 return (
@@ -101,19 +113,21 @@ export default function FindScreen() {
 
           {noResults ? (
             <View style={styles.noResultsCard}>
-              <Text style={styles.noResultsTitle}>Bunu henüz kaydetmemişsin.</Text>
-              <Text style={styles.noResultsBody}>Aradığın: “{q.trim()}”</Text>
+              <Text style={styles.noResultsTitle}>{t('find.noResultsTitle')}</Text>
+              <Text style={styles.noResultsBody}>{t('find.noResultsBody', { query: q.trim() })}</Text>
               <Pressable style={styles.noResultsCta} onPress={createFromQuery}>
-                <Text style={styles.noResultsCtaText}>“{q.trim()}” eşya olarak kaydet</Text>
+                <Text style={styles.noResultsCtaText} numberOfLines={2}>
+                  {t('find.noResultsCta', { query: q.trim() })}
+                </Text>
               </Pressable>
               <Pressable
                 style={styles.noResultsLostCta}
                 onPress={openLostForm}
                 hitSlop={9}
                 accessibilityRole="button"
-                accessibilityLabel="Kayıp bildir"
+                accessibilityLabel={t('find.reportLostA11y')}
               >
-                <Text style={styles.noResultsLostCtaText}>Kayıp mı? Kayıp bildir</Text>
+                <Text style={styles.noResultsLostCtaText}>{t('find.noResultsLostCta')}</Text>
               </Pressable>
             </View>
           ) : null}
@@ -121,14 +135,14 @@ export default function FindScreen() {
       ) : (
         <>
           <View style={styles.quickAdd}>
-            <Text style={styles.quickAddTitle}>Bir şeyi yerine mi koydun?</Text>
-            <Text style={styles.quickAddBody}>Şimdi kaydet, sonra arama.</Text>
+            <Text style={styles.quickAddTitle}>{t('find.quickAddTitle')}</Text>
+            <Text style={styles.quickAddBody}>{t('find.quickAddBody')}</Text>
             <Pressable
               style={({ pressed }) => [styles.quickAddBtn, pressed && styles.pressed]}
               onPress={openAddForm}
             >
               <PlusIcon />
-              <Text style={styles.quickAddBtnText}>Yeni eşya ekle</Text>
+              <Text style={styles.quickAddBtnText} numberOfLines={1}>{t('find.quickAddCta')}</Text>
             </Pressable>
           </View>
 
@@ -137,17 +151,17 @@ export default function FindScreen() {
             onPress={openLostForm}
             hitSlop={9}
             accessibilityRole="button"
-            accessibilityLabel="Kayıp bildir"
+            accessibilityLabel={t('find.reportLostA11y')}
           >
-            <Text style={styles.lostLinkText}>Bir şey mi kaybettin? Kayıp bildir</Text>
+            <Text style={styles.lostLinkText}>{t('find.lostLink')}</Text>
           </Pressable>
 
           <View style={styles.recentHeader}>
-            <Text style={styles.sectionLabel}>Son kayıtlar</Text>
+            <Text style={styles.sectionLabel}>{t('find.recentTitle')}</Text>
             {/* 13pt text is ~18pt tall; 13 of slop on each side clears 44pt
                 without moving the baseline it is aligned to. */}
-            <Pressable onPress={goItems} hitSlop={13} accessibilityRole="button" accessibilityLabel="Bütün eşyaları gör">
-              <Text style={styles.recentAll}>Tümü</Text>
+            <Pressable onPress={goItems} hitSlop={13} accessibilityRole="button" accessibilityLabel={t('find.seeAllA11y')}>
+              <Text style={styles.recentAll}>{t('find.seeAll')}</Text>
             </Pressable>
           </View>
           <View style={{ marginTop: 10, gap: 10 }}>

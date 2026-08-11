@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, type ListRenderItem } from 'react-native';
 import { colors, radii, spacing, typography, FREE_ITEM_LIMIT } from '../theme';
 import { useDepo, type FilterKey } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
 import type { Item } from '../db';
 import { haptics } from '../lib/haptics';
 import ItemRow from '../components/ItemRow';
@@ -16,11 +17,12 @@ export default function ItemsScreen() {
     selectedLoc, locationOptions, locFilterOpen, openLocFilterSheet, closeLocFilterSheet, chooseLocFilter,
     openHistory,
   } = useDepo();
+  const { t } = useI18n();
   // Free users get the limit inline rather than as a trailing sentence:
   // "8 / 20 eşya" reads in a glance where the old copy did not.
   const countLabel = isPro
-    ? `${storedItems.length} eşya`
-    : `${storedItems.length} / ${FREE_ITEM_LIMIT} eşya`;
+    ? t('items.countPro', { count: storedItems.length })
+    : t('items.countFree', { count: storedItems.length, limit: FREE_ITEM_LIMIT });
 
   const onChipPress = (key: FilterKey) => {
     haptics.light();
@@ -58,7 +60,7 @@ export default function ItemsScreen() {
     <View style={styles.root}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Eşyalar</Text>
+          <Text style={styles.title}>{t('items.title')}</Text>
           <Text style={styles.count}>{countLabel}</Text>
         </View>
         {/* Both are the shared 44pt icon button. The history one stays on the
@@ -69,11 +71,11 @@ export default function ItemsScreen() {
             onPress={openHistory}
             bg={colors.card}
             style={styles.historyBtn}
-            accessibilityLabel="Geçmişi aç"
+            accessibilityLabel={t('items.historyA11y')}
           >
             <HistoryIcon size={19} color={colors.textSecondary} />
           </IconButton>
-          <IconButton onPress={openAddForm} bg={colors.indigo} accessibilityLabel="Yeni eşya ekle">
+          <IconButton onPress={openAddForm} bg={colors.indigo} accessibilityLabel={t('items.addA11y')}>
             <PlusIcon size={18} />
           </IconButton>
         </View>
@@ -82,9 +84,9 @@ export default function ItemsScreen() {
       {storedItems.length === 0 ? (
         <EmptyState
           icon={<TabItemsIcon size={26} color={colors.indigo} />}
-          title="Henüz eşya eklemedin."
-          body="İlk eşyanı kaydet, sonra aramak zorunda kalma."
-          ctaLabel="İlk eşyamı ekle"
+          title={t('items.emptyTitle')}
+          body={t('items.emptyBody')}
+          ctaLabel={t('items.emptyCta')}
           onPress={openAddForm}
         />
       ) : (
@@ -99,7 +101,9 @@ export default function ItemsScreen() {
           >
             {filterDefs.map((f) => {
               const on = filter === f.key;
-              const label = f.key === 'loc' && on && selectedLoc ? `Konum · ${selectedLoc}` : f.label;
+              const label = f.key === 'loc' && on && selectedLoc
+                ? t('items.filterLocSelected', { loc: selectedLoc })
+                : f.label;
               return (
                 <Pressable
                   key={f.key}
@@ -137,7 +141,7 @@ export default function ItemsScreen() {
             windowSize={7}
             updateCellsBatchingPeriod={50}
             keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={<Text style={styles.empty}>Bu filtrede kayıt yok.</Text>}
+            ListEmptyComponent={<Text style={styles.empty}>{t('items.filterEmpty')}</Text>}
           />
         </>
       )}
@@ -146,16 +150,16 @@ export default function ItemsScreen() {
         <Pressable style={styles.sheetScrim} onPress={closeLocFilterSheet}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Konuma göre filtrele</Text>
+              <Text style={styles.sheetTitle} numberOfLines={1}>{t('items.locSheetTitle')}</Text>
               {/* The glyph is 17pt, so 14 of slop on each side clears 44pt
                   while leaving the header's alignment untouched. */}
-              <Pressable onPress={closeLocFilterSheet} hitSlop={14} accessibilityRole="button" accessibilityLabel="Kapat">
+              <Pressable onPress={closeLocFilterSheet} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('common.close')}>
                 <CloseIcon />
               </Pressable>
             </View>
             <ScrollView style={styles.sheetScroll}>
               {locationOptions.length === 0 ? (
-                <Text style={styles.sheetEmpty}>Henüz konum bilgisi yok.</Text>
+                <Text style={styles.sheetEmpty}>{t('items.locSheetEmpty')}</Text>
               ) : (
                 locationOptions.map((loc) => (
                   <Pressable

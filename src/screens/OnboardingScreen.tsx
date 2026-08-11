@@ -4,6 +4,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
 import { PrimaryButton } from '../components/common';
 
 function OnboardingGlyph() {
@@ -19,6 +20,7 @@ function OnboardingGlyph() {
 
 export default function OnboardingScreen() {
   const { onbData, onbStep, onbDotsCount, onbNext, onbSkip, accent } = useDepo();
+  const { t } = useI18n();
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.top}>
@@ -46,8 +48,8 @@ export default function OnboardingScreen() {
           ))}
         </View>
         <PrimaryButton label={onbData.cta} onPress={onbNext} />
-        <Pressable onPress={onbSkip} style={styles.skip}>
-          <Text style={styles.skipText}>Atla</Text>
+        <Pressable onPress={onbSkip} style={styles.skip} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('onboarding.skip')}>
+          <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
         </Pressable>
       </View>
     </SafeAreaView>

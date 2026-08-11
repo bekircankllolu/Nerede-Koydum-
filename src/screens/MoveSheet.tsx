@@ -3,22 +3,26 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
 import { PrimaryButton, SecondaryButton, MicButton } from '../components/common';
 
 export default function MoveSheet() {
   const { selected, moveVal, setMoveVal, closeMove, saveMove, startVoice } = useDepo();
+  const { t } = useI18n();
 
   return (
     <View style={styles.scrim}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ width: '100%' }}>
         <SafeAreaView edges={['bottom']} style={styles.sheet}>
-          <Text style={styles.title}>{(selected?.name || 'Eşya') + ' şimdi nerede?'}</Text>
+          <Text style={styles.title}>
+            {t('move.title', { name: selected?.name || t('move.fallbackName') })}
+          </Text>
           <View style={styles.row}>
             <View style={styles.fieldBox}>
               <TextInput
                 value={moveVal}
                 onChangeText={setMoveVal}
-                placeholder="Yeni konumu yaz ya da söyle"
+                placeholder={t('move.placeholder')}
                 placeholderTextColor={colors.textSecondary}
                 style={styles.input}
                 autoFocus
@@ -27,8 +31,8 @@ export default function MoveSheet() {
             <MicButton small size={52} onPress={() => startVoice('move')} />
           </View>
           <View style={styles.actions}>
-            <SecondaryButton label="Vazgeç" onPress={closeMove} style={{ flex: 1 }} />
-            <PrimaryButton label="Kaydet" onPress={saveMove} style={{ flex: 1.4, height: 52 }} />
+            <SecondaryButton label={t('common.cancel')} onPress={closeMove} style={{ flex: 1 }} />
+            <PrimaryButton label={t('common.save')} onPress={saveMove} style={{ flex: 1.4, height: 52 }} />
           </View>
         </SafeAreaView>
       </KeyboardAvoidingView>

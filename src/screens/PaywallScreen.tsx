@@ -3,49 +3,49 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, controls, radii, spacing, typography, FREE_ITEM_LIMIT } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
+import type { TranslationKey } from '../i18n';
 import { CheckIcon } from '../components/icons';
 
 // Only what `isPro` genuinely unlocks today: the item limit and CSV export.
 // Multiple photos, widgets/shortcuts and family sharing were listed here but
 // are not built, and promising them on a purchase screen is not acceptable.
-const FEATURES = [
-  'Sınırsız eşya kaydı',
-  'Eşyalarını CSV olarak dışa aktarma',
-  'Tek seferlik ödeme, abonelik yok',
-];
+const FEATURE_KEYS: TranslationKey[] = ['pro.feature1', 'pro.feature2', 'pro.feature3'];
 
 export default function PaywallScreen() {
   const {
     closePaywall, buyPro, restorePro, offeringStatus, lifetimePackage, purchasing, restoring,
   } = useDepo();
+  const { t } = useI18n();
 
-  // Never falls back to the old hard-coded ₺299 — a stale price is worse
-  // than a loading state, and the buy button stays disabled until this is
-  // the Store's own localized string.
+  // The amount always comes from StoreKit via RevenueCat and is never
+  // hard-coded; only the wording around it is translated. A stale price would
+  // be worse than a loading state, so the buy button stays disabled until the
+  // Store's own localized string has arrived.
   const priceLabel = lifetimePackage
-    ? `${lifetimePackage.product.priceString} · tek seferlik`
-    : offeringStatus === 'error' ? 'Fiyat şu anda alınamıyor'
-    : 'Fiyat yükleniyor…';
+    ? t('pro.oneTime', { price: lifetimePackage.product.priceString })
+    : offeringStatus === 'error' ? t('pro.priceUnavailable')
+    : t('pro.priceLoading');
   const buyDisabled = !lifetimePackage || purchasing || restoring;
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <Pressable onPress={closePaywall} style={styles.closeBtn}>
-        <Text style={styles.closeText}>Şimdilik değil</Text>
+        <Text style={styles.closeText} numberOfLines={1}>{t('pro.paywallClose')}</Text>
       </Pressable>
 
       <View style={styles.mid}>
         <View style={styles.titleGroup}>
-          <Text style={styles.title}>Her şeyin yerini hatırla.</Text>
+          <Text style={styles.title}>{t('pro.paywallTitle')}</Text>
           <Text style={styles.subtitle}>
-            {`Ücretsiz hesabında ${FREE_ITEM_LIMIT} eşya kaydettin. Depo Pro ile sınırsız devam et.`}
+            {t('pro.paywallSubtitle', { limit: FREE_ITEM_LIMIT })}
           </Text>
         </View>
         <View style={styles.featureList}>
-          {FEATURES.map((f) => (
-            <View key={f} style={styles.featureRow}>
+          {FEATURE_KEYS.map((key) => (
+            <View key={key} style={styles.featureRow}>
               <CheckIcon />
-              <Text style={styles.featureText}>{f}</Text>
+              <Text style={styles.featureText}>{t(key)}</Text>
             </View>
           ))}
         </View>
@@ -59,15 +59,15 @@ export default function PaywallScreen() {
           onPress={buyDisabled ? undefined : buyPro}
           disabled={buyDisabled}
           accessibilityRole="button"
-          accessibilityLabel="Ömür Boyu Pro satın al"
+          accessibilityLabel={t('pro.buyA11y')}
           accessibilityState={{ disabled: buyDisabled, busy: purchasing }}
         >
           {purchasing ? (
             <ActivityIndicator color="#fff" style={styles.buySpinner} />
           ) : (
             <>
-              <Text style={styles.buyTitle}>Ömür Boyu Pro</Text>
-              <Text style={styles.buySub}>{priceLabel}</Text>
+              <Text style={styles.buyTitle} numberOfLines={1}>{t('pro.buyTitle')}</Text>
+              <Text style={styles.buySub} numberOfLines={1}>{priceLabel}</Text>
             </>
           )}
         </Pressable>
@@ -76,13 +76,13 @@ export default function PaywallScreen() {
           disabled={purchasing || restoring}
           style={styles.restoreBtn}
           accessibilityRole="button"
-          accessibilityLabel="Satın almayı geri yükle"
+          accessibilityLabel={t('pro.restore')}
           accessibilityState={{ busy: restoring }}
         >
           {restoring ? (
             <ActivityIndicator color="rgba(255,255,255,0.62)" size="small" />
           ) : (
-            <Text style={styles.restoreText}>Satın almayı geri yükle</Text>
+            <Text style={styles.restoreText} numberOfLines={1}>{t('pro.restore')}</Text>
           )}
         </Pressable>
       </View>

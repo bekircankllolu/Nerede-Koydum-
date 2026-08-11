@@ -9,15 +9,21 @@ import { haptics } from '../lib/haptics';
 import { deleteManagedPhoto, isManagedPhoto, persistPhoto } from '../lib/photoStorage';
 import * as db from '../db';
 import type { Item } from '../db';
-import { search, norm, daysBetween, formatAgo, initialOf, shortLoc, fullLoc, splitLoc, titleCaseFirst } from '../lib/search';
+import {
+  search, norm, daysBetween, formatAgo, formatMonthDay, initialOf, shortLoc, fullLoc, splitLoc,
+  titleCaseFirst,
+} from '../lib/search';
+import { isUnknownLocation } from '../lib/location';
 import { itemsToCsv } from '../lib/csv';
 import { useVoiceRecognition } from '../lib/voice';
 import { colors, FREE_ITEM_LIMIT } from '../theme';
 import { DEFAULT_ITEM_COLOR, type ItemColorKey } from '../lib/colors';
+import { useI18n } from '../i18n/I18nProvider';
+import type { TranslationKey } from '../i18n';
 import {
   configureRevenueCat, fetchCustomerInfoSafe, findLifetimePackage, getCurrentOffering,
   isAlreadyPurchasedError, isCancelledError, isEntitlementActive, isRevenueCatAvailable,
-  purchaseErrorMessage, PURCHASES_UNAVAILABLE_MESSAGE,
+  purchaseErrorKeys, PURCHASES_UNAVAILABLE_COPY,
 } from '../lib/revenueCat';
 
 export type FilterKey = 'all' | 'recent' | 'fav' | 'nophoto' | 'loc';
@@ -38,19 +44,35 @@ const MAX_LOCATION_SUGGESTIONS = 6;
 /** After this long without confirmation, the detail screen suggests a re-check. */
 const STALE_LOCATION_DAYS = 90;
 
-const FILTER_DEFS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'Tümü' },
-  { key: 'recent', label: 'Son eklenenler' },
-  { key: 'fav', label: 'Favoriler' },
-  { key: 'nophoto', label: 'Fotoğrafsız' },
-  { key: 'loc', label: 'Konum' },
+// Keys rather than baked strings: the label is resolved at render time, so a
+// language change re-labels the chips without any of this being re-created.
+const FILTER_DEFS: { key: FilterKey; labelKey: TranslationKey }[] = [
+  { key: 'all', labelKey: 'items.filters.all' },
+  { key: 'recent', labelKey: 'items.filters.recent' },
+  { key: 'fav', labelKey: 'items.filters.fav' },
+  { key: 'nophoto', labelKey: 'items.filters.nophoto' },
+  { key: 'loc', labelKey: 'items.filters.loc' },
 ];
 
-const ONB_STEPS = [
-  { title: 'Bir daha evi baştan aşağı arama.', body: 'Nadiren kullandığın eşyalar hep kaybolur. Depo onları senin yerine hatırlar.', chips: ['Pasaport', 'Yedek anahtar', 'Kablolar'], cta: 'Devam' },
-  { title: 'Koyarken söyle.', body: 'Fotoğrafını çek ve nereye koyduğunu kaydet. On saniyeden kısa sürer.', chips: ['Pasaport', '→', 'Yatak odası', '→', 'Üst çekmece'], cta: 'Devam' },
-  { title: 'Gerektiğinde sor.', body: '"Pasaport nerede?" de, Depo sana göstersin.', chips: null as string[] | null, cta: 'İlk eşyamı kaydet' },
+const ONB_STEP_KEYS: {
+  title: TranslationKey; body: TranslationKey; cta: TranslationKey; chips: TranslationKey[] | null;
+}[] = [
+  {
+    title: 'onboarding.step1Title', body: 'onboarding.step1Body', cta: 'onboarding.step1Cta',
+    chips: ['onboarding.step1Chip1', 'onboarding.step1Chip2', 'onboarding.step1Chip3'],
+  },
+  {
+    title: 'onboarding.step2Title', body: 'onboarding.step2Body', cta: 'onboarding.step2Cta',
+    chips: ['onboarding.step2Chip1', 'onboarding.step2Chip2', 'onboarding.step2Chip3'],
+  },
+  {
+    title: 'onboarding.step3Title', body: 'onboarding.step3Body', cta: 'onboarding.step3Cta',
+    chips: null,
+  },
 ];
+
+// The arrows between the second step's chips are punctuation, not copy.
+const ONB_STEP2_SEPARATOR = '→';
 
 function daysSince(it: Item, now: number) {
   return daysBetween(it.updatedAt, now);
@@ -58,6 +80,11 @@ function daysSince(it: Item, now: number) {
 
 
 export function useDepoStore() {
+  // `t` is stable per locale, so listing it in the dependency arrays below
+  // only re-creates those callbacks when the language actually changes —
+  // never during normal scrolling, which is what keeps ItemRow's React.memo
+  // effective.
+  const { locale, t } = useI18n();
   const [booting, setBooting] = useState(true);
   const [items, setItems] = useState<Item[]>([]);
   const [isPro, setIsPro] = useState(false);
@@ -117,10 +144,18 @@ export function useDepoStore() {
 
   const voice = useVoiceRecognition();
 
+  // Read through a ref by every write path, so the DB layer always gets the
+  // locale that is current *at the moment of the write* without any of the
+  // callbacks below having to be re-created on a language change.
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
+
   useEffect(() => {
     configureRevenueCat();
     (async () => {
-      await db.initDb();
+      // Device language is resolved synchronously on the very first render,
+      // so a genuinely empty database is seeded in the right language.
+      await db.initDb(localeRef.current);
       // The item-tracking half of the app boots off local SQLite alone —
       // this never waits on RevenueCat, so a slow or unreachable network
       // never delays opening to the user's own data.
@@ -203,16 +238,20 @@ export function useDepoStore() {
 
   const openItem = useCallback((id: string) => setSelId(id), []);
 
+  // The user's own text (name, location, note) is never translated — only the
+  // "location unknown" placeholder, which was never user input to begin with.
   function card(it: Item) {
+    const unknownLoc = isUnknownLocation(it.loc);
+    const unknownLabel = t('common.unknownLocation');
     return {
       id: it.id,
       name: it.name,
-      initial: initialOf(it.name),
-      shortLoc: it.status === 'lost' ? (it.loc ? shortLoc(it.loc) : db.UNKNOWN_LOCATION) : shortLoc(it.loc),
-      fullLoc: it.loc ? fullLoc(it.loc) : db.UNKNOWN_LOCATION,
+      initial: initialOf(it.name, locale),
+      shortLoc: unknownLoc ? unknownLabel : shortLoc(it.loc),
+      fullLoc: unknownLoc ? unknownLabel : fullLoc(it.loc),
       fav: it.fav,
       photoUri: it.photoUri,
-      ago: formatAgo(it.updatedAt, now),
+      ago: formatAgo(it.updatedAt, now, locale),
       colorKey: it.colorKey,
       lost: it.status === 'lost',
       open: () => setSelId(it.id),
@@ -227,17 +266,21 @@ export function useDepoStore() {
     return {
       item: selected,
       name: selected.name,
-      lines: selected.loc ? splitLoc(selected.loc) : [db.UNKNOWN_LOCATION],
+      lines: isUnknownLocation(selected.loc)
+        ? [t('common.unknownLocation')]
+        : splitLoc(selected.loc),
       note: selected.note,
-      confirmed: `${formatAgo(selected.updatedAt, now)} doğrulandı.`,
+      confirmed: t('detail.confirmedAgo', { ago: formatAgo(selected.updatedAt, now, locale) }),
       // A location nobody has confirmed in months is worth a gentle nudge —
       // stated calmly, since a stale record is normal, not an error.
       stale: !isLost && daysBetween(selected.updatedAt, now) >= STALE_LOCATION_DAYS,
       isLost,
-      lostDaysLabel: isLost && selected.lostAt ? `${Math.max(0, daysBetween(selected.lostAt, now))} gündür kayıp` : null,
+      lostDaysLabel: isLost && selected.lostAt
+        ? t('detail.lostDays', { count: Math.max(0, daysBetween(selected.lostAt, now)) })
+        : null,
       history: selected.history.map((h, i) => ({
         where: h.where,
-        when: new Date(h.at).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' }),
+        when: formatMonthDay(h.at, locale),
         dot: i === 0 ? colors.accent : colors.photoPlaceholderBorder,
       })),
     };
@@ -303,7 +346,7 @@ export function useDepoStore() {
     resetForm();
     setFormMode('create');
     setFormEditingId(null);
-    setFormName(titleCaseFirst(q));
+    setFormName(titleCaseFirst(q, locale));
     setFormOpen(true);
   }
 
@@ -335,7 +378,7 @@ export function useDepoStore() {
           persistedPhotoUri = await persistPhoto(formPhotoUri);
         } catch (err) {
           if (__DEV__) console.error('[saveForm] persistPhoto failed', err);
-          flash('Fotoğraf kaydedilemedi.', 'Tekrar deneyebilirsin.');
+          flash(t('errors.photoSaveTitle'), t('errors.photoSaveBody'));
           return;
         }
       }
@@ -350,11 +393,11 @@ export function useDepoStore() {
         try {
           created = await create({
             name: formName, loc, note: formNote, photoUri, colorKey: formColorKey,
-          });
+          }, locale);
         } catch (err) {
           if (__DEV__) console.error('[saveForm] create failed', err);
           await deleteManagedPhoto(persistedPhotoUri);
-          flash('Eşya kaydedilemedi.', 'Bilgilerin duruyor, tekrar deneyebilirsin.');
+          flash(t('errors.itemSaveTitle'), t('errors.itemSaveBody'));
           return;
         }
         await refreshItems();
@@ -362,8 +405,14 @@ export function useDepoStore() {
         setScreen(isLost ? 'lost' : 'find');
         if (!isLost) setQ('');
         haptics.success();
-        if (isLost) flash('Kayıp olarak kaydettim.', created.name);
-        else flash('Kaydettim.', `${created.name} — ${created.loc}`);
+        if (isLost) {
+          flash(t('toast.savedLostTitle'), created.name);
+        } else {
+          const createdLoc = isUnknownLocation(created.loc)
+            ? t('common.unknownLocation')
+            : created.loc;
+          flash(t('toast.savedTitle'), t('toast.savedBody', { name: created.name, loc: createdLoc }));
+        }
       } else if (formMode === 'edit' && formEditingId) {
         const id = formEditingId;
         const movedTo = formLoc.trim() && formLoc.trim() !== formOriginalLoc.trim()
@@ -373,12 +422,13 @@ export function useDepoStore() {
           await db.updateItemWithOptionalMove(
             id,
             { name: formName, note: formNote, photoUri, colorKey: formColorKey },
+            locale,
             movedTo
           );
         } catch (err) {
           if (__DEV__) console.error('[saveForm] update failed', err);
           await deleteManagedPhoto(persistedPhotoUri);
-          flash('Değişiklikler kaydedilemedi.', 'Bilgilerin duruyor, tekrar deneyebilirsin.');
+          flash(t('errors.changesSaveTitle'), t('errors.changesSaveBody'));
           return;
         }
         // The row now points at the new photo, so the previous one is safe
@@ -387,7 +437,7 @@ export function useDepoStore() {
         await refreshItems();
         setFormOpen(false);
         haptics.success();
-        flash('Değişiklikleri kaydettim.', formName.trim());
+        flash(t('toast.changesSavedTitle'), formName.trim());
       }
     } finally {
       setFormSaving(false);
@@ -407,11 +457,11 @@ export function useDepoStore() {
       setMoveOpen(false);
       return;
     }
-    await db.moveItem(selId, moveVal);
+    await db.moveItem(selId, moveVal, locale);
     await refreshItems();
     setMoveOpen(false);
     setMoveVal('');
-    flash('Yeni yerini kaydettim.', 'Eski konum geçmişte duruyor.');
+    flash(t('toast.movedTitle'), t('toast.movedBody'));
   }
 
   async function toggleFav() {
@@ -426,7 +476,7 @@ export function useDepoStore() {
     await db.confirmItem(selId);
     await refreshItems();
     haptics.success();
-    flash('Yerini doğruladım.', 'Kayıt güncel olarak işaretlendi.');
+    flash(t('toast.confirmedTitle'), t('toast.confirmedBody'));
   }
 
   async function deleteItem() {
@@ -436,14 +486,14 @@ export function useDepoStore() {
       removed = await db.deleteItemDb(selId);
     } catch (err) {
       if (__DEV__) console.error('[deleteItem] failed', err);
-      flash('Kayıt silinemedi.', 'Tekrar deneyebilirsin.');
+      flash(t('errors.deleteTitle'), t('errors.deleteBody'));
       return;
     }
     setSelId(null);
     await refreshItems();
     // Only now that the row is gone is the file genuinely unreferenced.
     await deleteManagedPhoto(removed.photoUri);
-    flash('Kayıt silindi.', 'Fotoğrafı da cihazdan kaldırıldı.');
+    flash(t('toast.deletedTitle'), t('toast.deletedBody'));
   }
 
   // Row-level variants for the list swipe actions, which act on an arbitrary
@@ -453,8 +503,8 @@ export function useDepoStore() {
     if (!it) return;
     await db.toggleFavorite(id, !it.fav);
     await refreshItems();
-    flash(it.fav ? 'Favorilerden çıkarıldı.' : 'Favorilere eklendi.', it.name);
-  }, [refreshItems, flash]);
+    flash(it.fav ? t('toast.favRemovedTitle') : t('toast.favAddedTitle'), it.name);
+  }, [refreshItems, flash, t]);
 
   const deleteItemById = useCallback(async (id: string) => {
     const it = itemsRef.current.find((x) => x.id === id);
@@ -464,14 +514,14 @@ export function useDepoStore() {
       removed = await db.deleteItemDb(id);
     } catch (err) {
       if (__DEV__) console.error('[deleteItemById] failed', err);
-      flash('Kayıt silinemedi.', 'Tekrar deneyebilirsin.');
+      flash(t('errors.deleteTitle'), t('errors.deleteBody'));
       return;
     }
     if (selIdRef.current === id) setSelId(null);
     await refreshItems();
     await deleteManagedPhoto(removed.photoUri);
-    flash('Kayıt silindi.', `${it.name} — fotoğrafı da kaldırıldı.`);
-  }, [refreshItems, flash]);
+    flash(t('toast.deletedTitle'), t('toast.deletedBodyNamed', { name: it.name }));
+  }, [refreshItems, flash, t]);
 
   // Full-swipe delete: no confirmation Alert (the full swipe itself is the
   // deliberate gesture) — instead it's optimistic + undoable. The row
@@ -490,9 +540,9 @@ export function useDepoStore() {
     } catch {
       pendingDeletesRef.current.delete(id);
       await refreshItems();
-      flash('Kayıt silinemedi.', `${entry.item.name} geri getirildi.`);
+      flash(t('errors.deleteTitle'), t('errors.deleteRestoredBody', { name: entry.item.name }));
     }
-  }, [refreshItems, flash]);
+  }, [refreshItems, flash, t]);
 
   // The DB row was never touched during the undo window, so restoring is a
   // plain reload — no re-insert, hence no duplicate row and no lost history.
@@ -518,18 +568,18 @@ export function useDepoStore() {
     const timer = setTimeout(() => { commitPendingDelete(id); }, UNDO_WINDOW_MS);
     pendingDeletesRef.current.set(id, { item: it, timer });
 
-    flash('Kayıt silindi.', it.name, {
-      label: 'Geri Al',
+    flash(t('toast.deletedTitle'), it.name, {
+      label: t('common.undo'),
       onPress: () => undoDelete(id),
     });
-  }, [commitPendingDelete, undoDelete, flash]);
+  }, [commitPendingDelete, undoDelete, flash, t]);
 
   async function markLost() {
     if (!selId) return;
     const name = selected?.name ?? '';
     await db.markItemLost(selId);
     await refreshItems();
-    flash('Kayıp olarak işaretlendi.', name);
+    flash(t('toast.markedLostTitle'), name);
   }
 
   function openFoundSheet() {
@@ -542,12 +592,12 @@ export function useDepoStore() {
   }
   async function markFound(useNewLoc: boolean) {
     if (!selId) return;
-    await db.markItemFound(selId, useNewLoc ? foundLocVal : undefined);
+    await db.markItemFound(selId, locale, useNewLoc ? foundLocVal : undefined);
     await refreshItems();
     setFoundSheetOpen(false);
     setFoundLocVal('');
     haptics.success();
-    flash('Buldun!', 'Yeni yerini kaydettim.');
+    flash(t('toast.foundTitle'), t('toast.foundBody'));
   }
 
   function startVoice(target: Exclude<VoiceTarget, null>) {
@@ -575,8 +625,29 @@ export function useDepoStore() {
     voice.reset();
   }
 
+  // Re-derived when the locale changes, so switching language mid-onboarding
+  // re-labels the step immediately.
+  const onbData = useMemo(() => {
+    const step = ONB_STEP_KEYS[onbStep];
+    const chips = step.chips ? step.chips.map((key) => t(key)) : null;
+    return {
+      title: t(step.title),
+      body: t(step.body),
+      cta: t(step.cta),
+      // Step two reads as a flow, so its chips are joined by arrows.
+      chips: chips && onbStep === 1
+        ? [chips[0], ONB_STEP2_SEPARATOR, chips[1], ONB_STEP2_SEPARATOR, chips[2]]
+        : chips,
+    };
+  }, [onbStep, t]);
+
+  const filterDefs = useMemo(
+    () => FILTER_DEFS.map((f) => ({ key: f.key, label: t(f.labelKey) })),
+    [t]
+  );
+
   function onbNext() {
-    if (onbStep < ONB_STEPS.length - 1) {
+    if (onbStep < ONB_STEP_KEYS.length - 1) {
       setOnbStep(onbStep + 1);
     } else {
       finishOnboarding(true);
@@ -618,6 +689,13 @@ export function useDepoStore() {
     }
   }, []);
 
+  // Resolves an SDK error to copy at the moment it is shown, so the message
+  // is always in the language that is active right then.
+  const purchaseErrorCopy = useCallback((err: unknown): [string, string] => {
+    const { titleKey, bodyKey } = purchaseErrorKeys(err);
+    return [t(titleKey), t(bodyKey)];
+  }, [t]);
+
   function openPaywall() {
     // Last line of defence: every current caller already checks `isPro`, but
     // a future entry point that forgets must still never show a purchase
@@ -641,11 +719,11 @@ export function useDepoStore() {
         setIsPro(true);
         setPaywall(false);
         haptics.success();
-        flash('Depo Pro etkin.', 'Artık sınırsız eşya kaydedebilirsin.');
+        flash(t('pro.purchasedTitle'), t('pro.purchasedBody'));
       } else {
         // The store reported success but RevenueCat's own entitlement check
         // disagrees — never claim success on the strength of the former.
-        flash('Satın alma tamamlanamadı.', 'Tekrar deneyebilirsin.');
+        flash(t('errors.purchaseFailedTitle'), t('errors.purchaseFailedBody'));
       }
     } catch (err) {
       if (isCancelledError(err)) {
@@ -656,15 +734,13 @@ export function useDepoStore() {
         if (info && isEntitlementActive(info)) {
           setIsPro(true);
           setPaywall(false);
-          flash('Depo Pro zaten etkin.', 'Tekrar ödeme yapmana gerek yok.');
+          flash(t('pro.alreadyActiveTitle'), t('pro.alreadyActiveBody'));
         } else {
-          const { title, body } = purchaseErrorMessage(err);
-          flash(title, body);
+          flash(...purchaseErrorCopy(err));
         }
       } else {
         if (__DEV__) console.error('[buyPro] purchase failed', err);
-        const { title, body } = purchaseErrorMessage(err);
-        flash(title, body);
+        flash(...purchaseErrorCopy(err));
       }
     } finally {
       setPurchasing(false);
@@ -676,7 +752,7 @@ export function useDepoStore() {
   async function restorePro() {
     if (purchasing || restoring) return;
     if (!isRevenueCatAvailable()) {
-      flash(PURCHASES_UNAVAILABLE_MESSAGE.title, PURCHASES_UNAVAILABLE_MESSAGE.body);
+      flash(t(PURCHASES_UNAVAILABLE_COPY.titleKey), t(PURCHASES_UNAVAILABLE_COPY.bodyKey));
       return;
     }
     setRestoring(true);
@@ -686,15 +762,14 @@ export function useDepoStore() {
         setIsPro(true);
         setPaywall(false);
         haptics.success();
-        flash('Satın alma geri yüklendi.', 'Depo Pro yeniden etkin.');
+        flash(t('pro.restoredTitle'), t('pro.restoredBody'));
       } else {
         setIsPro(false);
-        flash('Geri yüklenecek satın alma bulunamadı.', 'Bu hesapta önceden yapılmış bir satın alma yok.');
+        flash(t('pro.nothingToRestoreTitle'), t('pro.nothingToRestoreBody'));
       }
     } catch (err) {
       if (__DEV__) console.error('[restorePro] restore failed', err);
-      const { title, body } = purchaseErrorMessage(err);
-      flash(title, body);
+      flash(...purchaseErrorCopy(err));
     } finally {
       setRestoring(false);
     }
@@ -723,13 +798,13 @@ export function useDepoStore() {
       removed = await db.deleteAllItems();
     } catch (err) {
       if (__DEV__) console.error('[deleteAllData] failed', err);
-      flash('Veriler silinemedi.', 'Tekrar deneyebilirsin.');
+      flash(t('errors.deleteAllTitle'), t('errors.deleteAllBody'));
       return;
     }
     setItems([]);
     setSelId(null);
     for (const uri of removed.photoUris) await deleteManagedPhoto(uri);
-    flash('Bütün veriler silindi.', 'Eşya kayıtları cihazdan kaldırıldı.');
+    flash(t('toast.deletedAllTitle'), t('toast.deletedAllBody'));
   }
 
   async function exportCsv() {
@@ -737,16 +812,19 @@ export function useDepoStore() {
       openPaywall();
       return;
     }
-    const csv = itemsToCsv(items);
+    const csv = itemsToCsv(items, locale);
     const file = new File(Paths.cache, `depo-esyalar-${Date.now()}.csv`);
     file.create({ overwrite: true });
     file.write(csv);
     const available = await Sharing.isAvailableAsync();
     if (!available) {
-      flash('Paylaşım kullanılamıyor.', 'Bu cihazda dosya paylaşımı desteklenmiyor.');
+      flash(t('errors.sharingTitle'), t('errors.sharingBody'));
       return;
     }
-    await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: 'Eşyaları dışa aktar' });
+    await Sharing.shareAsync(file.uri, {
+      mimeType: 'text/csv',
+      dialogTitle: t('settings.exportData'),
+    });
   }
 
   const storedItems = useMemo(() => items.filter((it) => it.status === 'stored'), [items]);
@@ -835,8 +913,8 @@ export function useDepoStore() {
     isPro,
     showOnboarding,
     onbStep,
-    onbData: ONB_STEPS[onbStep],
-    onbDotsCount: ONB_STEPS.length,
+    onbData,
+    onbDotsCount: ONB_STEP_KEYS.length,
     onbNext,
     onbSkip,
 
@@ -847,7 +925,7 @@ export function useDepoStore() {
     setQ,
     filter,
     setFilter,
-    filterDefs: FILTER_DEFS,
+    filterDefs,
     selectedLoc,
     locationOptions,
     locFilterOpen,

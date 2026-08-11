@@ -3,44 +3,35 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii } from '../theme';
 import { useDepo } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
+import type { TranslationKey } from '../i18n';
 
-const SECTIONS = [
-  {
-    title: 'Veriler cihazında kalır',
-    body: 'Eşya adları, konumları, notların ve fotoğrafların yalnızca telefonunda saklanır. Depo hiçbir sunucuya bağlanmaz, hiçbir veriyi dışarı göndermez.',
-  },
-  {
-    title: 'Hesap gerekmez',
-    body: 'Depo\'yu kullanmak için kayıt olman ya da giriş yapman gerekmiyor. Uygulama sildiğinde veya cihazı değiştirdiğinde eski verilere erişemezsin, çünkü hiçbir yerde bir kopyası tutulmaz.',
-  },
-  {
-    title: 'Sesle kayıt',
-    body: 'Konuşma tanıma, işletim sisteminin kendi servisi üzerinden çalışır. Depo, söylediklerinin bir kopyasını saklamaz.',
-  },
-  {
-    title: 'Reklam ve takip yok',
-    body: 'Uygulama içinde reklam ağı, analitik takip ya da üçüncü taraf paylaşımı bulunmuyor.',
-  },
+const SECTION_KEYS: { title: TranslationKey; body: TranslationKey }[] = [
+  { title: 'privacy.s1Title', body: 'privacy.s1Body' },
+  { title: 'privacy.s2Title', body: 'privacy.s2Body' },
+  { title: 'privacy.s3Title', body: 'privacy.s3Body' },
+  { title: 'privacy.s4Title', body: 'privacy.s4Body' },
 ];
 
 export default function PrivacyScreen() {
   const { closePrivacy } = useDepo();
+  const { t } = useI18n();
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <Pressable onPress={closePrivacy} hitSlop={8}>
-          <Text style={styles.back}>‹ Geri</Text>
+        <Pressable onPress={closePrivacy} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.backA11y')}>
+          <Text style={styles.back} numberOfLines={1}>{t('common.back')}</Text>
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Gizlilik</Text>
+        <Text style={styles.title}>{t('privacy.title')}</Text>
 
-        {SECTIONS.map((s) => (
-          <View key={s.title} style={styles.card}>
-            <Text style={styles.cardTitle}>{s.title}</Text>
-            <Text style={styles.cardBody}>{s.body}</Text>
+        {SECTION_KEYS.map((section) => (
+          <View key={section.title} style={styles.card}>
+            <Text style={styles.cardTitle}>{t(section.title)}</Text>
+            <Text style={styles.cardBody}>{t(section.body)}</Text>
           </View>
         ))}
       </ScrollView>

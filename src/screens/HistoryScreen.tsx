@@ -4,8 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import { colors, motion, radii, spacing, surfaces, typography } from '../theme';
 import { useDepo } from '../state/DepoContext';
-import { UNKNOWN_LOCATION, type Item } from '../db';
-import { MONTHS_TR, initialOf, lastSegment, splitLoc } from '../lib/search';
+import type { Item } from '../db';
+import { formatMonthDay, initialOf, lastSegment, splitLoc } from '../lib/search';
+import { isUnknownLocation } from '../lib/location';
+import { useI18n } from '../i18n/I18nProvider';
+import type { AppLocale, TranslationKey } from '../i18n';
+import type { TranslateFn } from '../i18n/I18nProvider';
 import { haptics } from '../lib/haptics';
 import ItemAvatar from '../components/ItemAvatar';
 import EmptyState from '../components/EmptyState';
@@ -33,15 +37,15 @@ type HistoryEvent = {
 
 type RangeKey = 'all' | '30' | '7';
 
-const RANGES: { key: RangeKey; label: string; days: number | null }[] = [
-  { key: '7', label: 'Son 7 gün', days: 7 },
-  { key: '30', label: 'Son 30 gün', days: 30 },
-  { key: 'all', label: 'Tümü', days: null },
+const RANGES: { key: RangeKey; labelKey: TranslationKey; days: number | null }[] = [
+  { key: '7', labelKey: 'history.range7', days: 7 },
+  { key: '30', labelKey: 'history.range30', days: 30 },
+  { key: 'all', labelKey: 'history.rangeAll', days: null },
 ];
 
-const EVENT_LABEL: Record<EventType, string> = {
-  created: 'Eklendi',
-  moved: 'Taşındı',
+const EVENT_LABEL_KEY: Record<EventType, TranslationKey> = {
+  created: 'history.eventCreated',
+  moved: 'history.eventMoved',
 };
 
 /** ' › ' rather than the list rows' ' · ' — a path reads as a direction here. */
@@ -55,17 +59,16 @@ function startOfDay(ts: number): number {
 }
 
 /**
- * "Bugün" / "Dün" / "8 Ağustos" / "12 Aralık 2025".
- * Built from the platform Date plus the month table the app already ships —
- * no date library, and no dependency on Intl being present in the runtime.
+ * "Bugün" / "Dün" / "8 Ağustos" / "12 Aralık 2025" — and their English
+ * equivalents, formatted by the platform for the active locale. Still no
+ * date library.
  */
-function dayLabel(ts: number, now: number): string {
+function dayLabel(ts: number, now: number, locale: AppLocale, t: TranslateFn): string {
   const diffDays = Math.round((startOfDay(now) - startOfDay(ts)) / DAY_MS);
-  if (diffDays === 0) return 'Bugün';
-  if (diffDays === 1) return 'Dün';
-  const d = new Date(ts);
-  const base = `${d.getDate()} ${MONTHS_TR[d.getMonth()]}`;
-  return d.getFullYear() === new Date(now).getFullYear() ? base : `${base} ${d.getFullYear()}`;
+  if (diffDays === 0) return t('history.today');
+  if (diffDays === 1) return t('history.yesterday');
+  const sameYear = new Date(ts).getFullYear() === new Date(now).getFullYear();
+  return formatMonthDay(ts, locale, !sameYear);
 }
 
 function clock(ts: number): string {
@@ -86,16 +89,22 @@ function clock(ts: number): string {
  *    by definition the item's current location, so that one — and only that
  *    one — can be widened to the full path from `item.loc`.
  */
-function buildEvents(items: Item[]): HistoryEvent[] {
+function buildEvents(items: Item[], locale: AppLocale, unknownLabel: string): HistoryEvent[] {
   const out: HistoryEvent[] = [];
   for (const it of items) {
     const h = it.history; // newest first, straight from listItems()
     if (h.length === 0) continue;
-    const initial = initialOf(it.name);
-    const currentTail = lastSegment(it.loc);
+    const initial = initialOf(it.name, locale);
+    const unknownLoc = isUnknownLocation(it.loc);
+    const currentTail = unknownLoc ? '' : lastSegment(it.loc);
     for (let i = 0; i < h.length; i++) {
       const isNewest = i === 0;
-      const where = isNewest && currentTail === h[i].where ? breadcrumb(it.loc) : h[i].where;
+      const raw = isNewest && !unknownLoc && currentTail === h[i].where
+        ? breadcrumb(it.loc)
+        : h[i].where;
+      // Neither the internal token nor the legacy Turkish placeholder is ever
+      // shown — both resolve to the current locale's wording.
+      const where = isUnknownLocation(raw) ? unknownLabel : raw;
       out.push({
         key: `${it.id}:${i}:${h[i].at}`,
         itemId: it.id,
@@ -103,7 +112,7 @@ function buildEvents(items: Item[]): HistoryEvent[] {
         initial,
         colorKey: it.colorKey,
         photoUri: it.photoUri,
-        where: where || UNKNOWN_LOCATION,
+        where,
         type: i === h.length - 1 ? 'created' : 'moved',
         at: h[i].at,
       });
@@ -113,22 +122,30 @@ function buildEvents(items: Item[]): HistoryEvent[] {
   return out;
 }
 
-function Row({ event, onPress }: { event: HistoryEvent; onPress: (id: string) => void }) {
+function Row({
+  event, onPress, eventLabel, timeLabel, a11yLabel,
+}: {
+  event: HistoryEvent;
+  onPress: (id: string) => void;
+  eventLabel: string;
+  timeLabel: string;
+  a11yLabel: string;
+}) {
   return (
     <Pressable
       onPress={() => onPress(event.itemId)}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
       accessibilityRole="button"
-      accessibilityLabel={`${event.name}, ${EVENT_LABEL[event.type]}, ${event.where}, ${clock(event.at)}`}
+      accessibilityLabel={a11yLabel}
     >
       <ItemAvatar initial={event.initial} colorKey={event.colorKey} photoUri={event.photoUri} size={40} />
       <View style={styles.rowText}>
         <Text style={styles.rowName} numberOfLines={1}>{event.name}</Text>
         <Text style={styles.rowWhere} numberOfLines={1}>
-          {EVENT_LABEL[event.type]} · {event.where}
+          {eventLabel} · {event.where}
         </Text>
       </View>
-      <Text style={styles.rowTime}>{clock(event.at)}</Text>
+      <Text style={styles.rowTime}>{timeLabel}</Text>
     </Pressable>
   );
 }
@@ -137,6 +154,7 @@ const MemoRow = React.memo(Row);
 
 export default function HistoryScreen() {
   const { items, closeHistory, openItem } = useDepo();
+  const { locale, t } = useI18n();
   const reduced = useReducedMotion();
   const [range, setRange] = useState<RangeKey>('all');
 
@@ -148,7 +166,11 @@ export default function HistoryScreen() {
   // in one transaction), and items inside an open undo window are already
   // filtered out of `items` — so a row here can never point at a record that
   // no longer opens.
-  const events = useMemo(() => buildEvents(items), [items]);
+  const unknownLabel = t('common.unknownLocation');
+  const events = useMemo(
+    () => buildEvents(items, locale, unknownLabel),
+    [items, locale, unknownLabel]
+  );
 
   const sections = useMemo(() => {
     const days = RANGES.find((r) => r.key === range)?.days ?? null;
@@ -161,13 +183,13 @@ export default function HistoryScreen() {
       const d = new Date(e.at);
       const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       if (key !== lastKey) {
-        out.push({ title: dayLabel(e.at, now), data: [] });
+        out.push({ title: dayLabel(e.at, now, locale, t), data: [] });
         lastKey = key;
       }
       out[out.length - 1].data.push(e);
     }
     return out;
-  }, [events, range, now]);
+  }, [events, range, now, locale, t]);
 
   const onRowPress = useCallback((id: string) => openItem(id), [openItem]);
 
@@ -177,13 +199,14 @@ export default function HistoryScreen() {
 
   const header = (
     <View style={styles.listHeader}>
-      <Text style={styles.title}>Geçmiş</Text>
-      <Text style={styles.subtitle}>Eşyalarını nereye koyduğunun kaydı.</Text>
+      <Text style={styles.title}>{t('history.title')}</Text>
+      <Text style={styles.subtitle}>{t('history.subtitle')}</Text>
       {/* Kept mounted even when the filtered result is empty, so the user can
           always widen the range again. */}
       <View style={styles.chipRow}>
         {RANGES.map((r) => {
           const on = range === r.key;
+          const label = t(r.labelKey);
           return (
             <Pressable
               key={r.key}
@@ -198,10 +221,15 @@ export default function HistoryScreen() {
                 pressed && !on && { backgroundColor: colors.neutralChipPressed },
               ]}
               accessibilityRole="button"
-              accessibilityLabel={r.label}
+              accessibilityLabel={label}
               accessibilityState={{ selected: on }}
             >
-              <Text style={[styles.chipText, { color: on ? '#fff' : colors.neutralChipText }]}>{r.label}</Text>
+              <Text
+                style={[styles.chipText, { color: on ? '#fff' : colors.neutralChipText }]}
+                numberOfLines={1}
+              >
+                {label}
+              </Text>
             </Pressable>
           );
         })}
@@ -212,29 +240,43 @@ export default function HistoryScreen() {
   const empty = events.length === 0 ? (
     <EmptyState
       icon={<HistoryIcon size={26} color={colors.indigo} />}
-      title="Henüz geçmiş yok."
-      body="Eşyalarını kaydettikçe hareketlerini burada görebilirsin."
+      title={t('history.emptyTitle')}
+      body={t('history.emptyBody')}
     />
   ) : (
     <EmptyState
       icon={<HistoryIcon size={26} color={colors.indigo} />}
-      title="Bu aralıkta hareket yok."
-      body="Daha geniş bir tarih aralığı seçebilirsin."
+      title={t('history.rangeEmptyTitle')}
+      body={t('history.rangeEmptyBody')}
     />
   );
 
   return (
     <AnimatedSafeArea style={styles.root} edges={['top', 'bottom']} entering={entering}>
       <View style={styles.navBar}>
-        <Pressable onPress={closeHistory} hitSlop={12} accessibilityRole="button" accessibilityLabel="Geri">
-          <Text style={styles.back}>‹ Geri</Text>
+        <Pressable onPress={closeHistory} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('common.backA11y')}>
+          <Text style={styles.back} numberOfLines={1}>{t('common.back')}</Text>
         </Pressable>
       </View>
 
       <SectionList
         sections={sections}
         keyExtractor={(e) => e.key}
-        renderItem={({ item }) => <MemoRow event={item} onPress={onRowPress} />}
+        renderItem={({ item }) => {
+          const eventLabel = t(EVENT_LABEL_KEY[item.type]);
+          const timeLabel = clock(item.at);
+          return (
+            <MemoRow
+              event={item}
+              onPress={onRowPress}
+              eventLabel={eventLabel}
+              timeLabel={timeLabel}
+              a11yLabel={t('history.rowA11y', {
+                name: item.name, event: eventLabel, where: item.where, time: timeLabel,
+              })}
+            />
+          );
+        }}
         renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
         ListHeaderComponent={header}
         ListEmptyComponent={empty}
@@ -259,7 +301,7 @@ const styles = StyleSheet.create({
   listHeader: { marginBottom: spacing.xs },
   title: { ...typography.largeTitle, color: colors.textPrimary },
   subtitle: { ...typography.subheadline, color: colors.textSecondary, marginTop: spacing.xs },
-  chipRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
   chip: {
     height: 34, paddingHorizontal: spacing.lg - 2, borderRadius: radii.pill,
     alignItems: 'center', justifyContent: 'center',

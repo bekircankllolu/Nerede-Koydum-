@@ -11,6 +11,7 @@ import { type ItemColorKey } from '../lib/colors';
 import { ChevronRight, StarIcon, TrashIcon } from './icons';
 import ItemAvatar from './ItemAvatar';
 import StatusBadge from './StatusBadge';
+import { useI18n } from '../i18n/I18nProvider';
 
 // Callbacks take the row's id rather than closing over it, so screens can
 // pass referentially stable handlers and the React.memo below actually
@@ -87,6 +88,9 @@ function ItemRow({
 }: Props) {
   const swipeEnabled = !!(onToggleFav || onDeleteConfirm || onFullSwipeDelete);
   const canDelete = !!(onDeleteConfirm || onFullSwipeDelete);
+  // Context, so a language change re-labels the swipe actions of every
+  // mounted row — React.memo is bypassed by context on purpose here.
+  const { t } = useI18n();
 
   const rowId = useRef({}).current;
   const [removing, setRemoving] = useState(false);
@@ -294,12 +298,12 @@ function ItemRow({
 
   const handleDeleteTap = () => {
     Alert.alert(
-      'Bu kaydı silmek istediğine emin misin?',
-      `${name} kalıcı olarak silinecek.`,
+      t('swipe.deleteConfirmTitle'),
+      t('swipe.deleteConfirmBody', { name }),
       [
-        { text: 'Vazgeç', style: 'cancel', onPress: close },
+        { text: t('common.cancel'), style: 'cancel', onPress: close },
         {
-          text: 'Sil',
+          text: t('swipe.deleteConfirmCta'),
           style: 'destructive',
           onPress: () => {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
@@ -356,7 +360,7 @@ function ItemRow({
           <Pressable
             onPress={handleFavTap}
             accessibilityRole="button"
-            accessibilityLabel={isFav ? 'Favorilerden çıkar' : 'Favoriye ekle'}
+            accessibilityLabel={isFav ? t('swipe.favRemove') : t('swipe.favAdd')}
             style={[styles.capsule, { backgroundColor: colors.swipeFavorite }]}
           >
             <Animated.View style={favIconStyle}>
@@ -371,7 +375,7 @@ function ItemRow({
           <Pressable
             onPress={handleDeleteTap}
             accessibilityRole="button"
-            accessibilityLabel="Kaydı sil"
+            accessibilityLabel={t('swipe.delete')}
             style={[styles.capsule, { backgroundColor: colors.swipeDelete }]}
           >
             <Animated.View style={delIconStyle}>

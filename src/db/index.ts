@@ -1,6 +1,8 @@
 import * as SQLite from 'expo-sqlite';
 import { normalizeLocInput, lastSegment } from '../lib/search';
+import { UNKNOWN_LOCATION_TOKEN } from '../lib/location';
 import { DEFAULT_ITEM_COLOR, type ItemColorKey, isItemColorKey } from '../lib/colors';
+import type { AppLocale } from '../i18n';
 
 export type HistoryEntry = {
   where: string;
@@ -24,7 +26,7 @@ export type Item = {
   history: HistoryEntry[]; // newest first
 };
 
-export const UNKNOWN_LOCATION = 'Konum bilinmiyor';
+export { UNKNOWN_LOCATION_TOKEN, isUnknownLocation } from '../lib/location';
 
 const DB_NAME = 'depo.db';
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -81,34 +83,60 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await ensureColumn(db, 'items', 'lost_at', 'lost_at INTEGER');
 }
 
+type SeedDef = {
+  name: string; loc: string; note: string; fav: boolean; hasPhoto: boolean;
+  daysAgo: number; history: Array<{ where: string; daysAgo: number }>;
+};
+
+const SEEDS_TR: SeedDef[] = [
+  { name: 'Pasaport', loc: 'Yatak odası / Beyaz dolap / Üst çekmece', note: 'Pasaportla birlikte eski vizeler de burada.', fav: true, hasPhoto: true, daysAgo: 3,
+    history: [{ where: 'Üst çekmece', daysAgo: 3 }, { where: 'Çalışma masası', daysAgo: 87 }, { where: 'Mavi valiz', daysAgo: 208 }] },
+  { name: 'Matkap', loc: 'Balkon / Alet dolabı / Alt raf', note: 'Şarj adaptörü aynı çantada.', fav: false, hasPhoto: true, daysAgo: 7,
+    history: [{ where: 'Alet dolabı', daysAgo: 7 }, { where: 'Bodrum rafı', daysAgo: 100 }] },
+  { name: 'Kışlık montlar', loc: 'Yatak odası / Gardırop / Üst raf', note: '', fav: false, hasPhoto: false, daysAgo: 14,
+    history: [{ where: 'Gardırop üst raf', daysAgo: 14 }, { where: 'Mavi valiz', daysAgo: 140 }] },
+  { name: 'Yedek anahtar', loc: 'Salon / TV ünitesi / Sol dolap', note: 'Ev ve bodrum anahtarı birlikte.', fav: true, hasPhoto: false, daysAgo: 21,
+    history: [{ where: 'TV ünitesi sol dolap', daysAgo: 21 }] },
+  { name: 'Şarj aleti', loc: 'Çalışma odası / Masa çekmecesi', note: '', fav: false, hasPhoto: true, daysAgo: 32,
+    history: [{ where: 'Masa çekmecesi', daysAgo: 32 }, { where: 'Salon sehpası', daysAgo: 44 }] },
+  { name: 'Eski pasaport', loc: 'Salon / TV ünitesi / Sol dolap', note: '', fav: false, hasPhoto: false, daysAgo: 60,
+    history: [{ where: 'TV ünitesi sol dolap', daysAgo: 60 }] },
+  { name: "Cemre'nin pasaportu", loc: 'Yatak odası / Komodin / Alt çekmece', note: '', fav: false, hasPhoto: true, daysAgo: 64,
+    history: [{ where: 'Komodin alt çekmece', daysAgo: 64 }] },
+];
+
+// The same dataset, so an English first-launch sees demo content it can
+// actually read. Shape, timings and photo flags are identical.
+const SEEDS_EN: SeedDef[] = [
+  { name: 'Passport', loc: 'Bedroom / White cabinet / Top drawer', note: 'The old visas are in here too.', fav: true, hasPhoto: true, daysAgo: 3,
+    history: [{ where: 'Top drawer', daysAgo: 3 }, { where: 'Desk', daysAgo: 87 }, { where: 'Blue suitcase', daysAgo: 208 }] },
+  { name: 'Drill', loc: 'Balcony / Tool cabinet / Bottom shelf', note: 'The charger is in the same bag.', fav: false, hasPhoto: true, daysAgo: 7,
+    history: [{ where: 'Tool cabinet', daysAgo: 7 }, { where: 'Basement shelf', daysAgo: 100 }] },
+  { name: 'Winter coats', loc: 'Bedroom / Wardrobe / Top shelf', note: '', fav: false, hasPhoto: false, daysAgo: 14,
+    history: [{ where: 'Wardrobe top shelf', daysAgo: 14 }, { where: 'Blue suitcase', daysAgo: 140 }] },
+  { name: 'Spare key', loc: 'Living room / TV unit / Left cabinet', note: 'House and basement keys together.', fav: true, hasPhoto: false, daysAgo: 21,
+    history: [{ where: 'TV unit left cabinet', daysAgo: 21 }] },
+  { name: 'Phone charger', loc: 'Study / Desk drawer', note: '', fav: false, hasPhoto: true, daysAgo: 32,
+    history: [{ where: 'Desk drawer', daysAgo: 32 }, { where: 'Coffee table', daysAgo: 44 }] },
+  { name: 'Old passport', loc: 'Living room / TV unit / Left cabinet', note: '', fav: false, hasPhoto: false, daysAgo: 60,
+    history: [{ where: 'TV unit left cabinet', daysAgo: 60 }] },
+  { name: 'Kids’ passports', loc: 'Bedroom / Nightstand / Bottom drawer', note: '', fav: false, hasPhoto: true, daysAgo: 64,
+    history: [{ where: 'Nightstand bottom drawer', daysAgo: 64 }] },
+];
+
 // Demo data matching the design's SEED, translated into real timestamps
 // relative to "now" so ago-labels and history stay internally consistent.
-async function seedIfEmpty(db: SQLite.SQLiteDatabase) {
+//
+// The `seeded` flag is checked exactly as before, so an install that already
+// ran this never re-seeds and never has its rows rewritten — only a genuinely
+// empty database is touched, and only once.
+async function seedIfEmpty(db: SQLite.SQLiteDatabase, locale: AppLocale) {
   const seeded = await getMetaDb(db, 'seeded');
   if (seeded) return;
 
   const now = Date.now();
   const DAY = 86400000;
-  type SeedDef = {
-    name: string; loc: string; note: string; fav: boolean; hasPhoto: boolean;
-    daysAgo: number; history: Array<{ where: string; daysAgo: number }>;
-  };
-  const seeds: SeedDef[] = [
-    { name: 'Pasaport', loc: 'Yatak odası / Beyaz dolap / Üst çekmece', note: 'Pasaportla birlikte eski vizeler de burada.', fav: true, hasPhoto: true, daysAgo: 3,
-      history: [{ where: 'Üst çekmece', daysAgo: 3 }, { where: 'Çalışma masası', daysAgo: 87 }, { where: 'Mavi valiz', daysAgo: 208 }] },
-    { name: 'Matkap', loc: 'Balkon / Alet dolabı / Alt raf', note: 'Şarj adaptörü aynı çantada.', fav: false, hasPhoto: true, daysAgo: 7,
-      history: [{ where: 'Alet dolabı', daysAgo: 7 }, { where: 'Bodrum rafı', daysAgo: 100 }] },
-    { name: 'Kışlık montlar', loc: 'Yatak odası / Gardırop / Üst raf', note: '', fav: false, hasPhoto: false, daysAgo: 14,
-      history: [{ where: 'Gardırop üst raf', daysAgo: 14 }, { where: 'Mavi valiz', daysAgo: 140 }] },
-    { name: 'Yedek anahtar', loc: 'Salon / TV ünitesi / Sol dolap', note: 'Ev ve bodrum anahtarı birlikte.', fav: true, hasPhoto: false, daysAgo: 21,
-      history: [{ where: 'TV ünitesi sol dolap', daysAgo: 21 }] },
-    { name: 'Şarj aleti', loc: 'Çalışma odası / Masa çekmecesi', note: '', fav: false, hasPhoto: true, daysAgo: 32,
-      history: [{ where: 'Masa çekmecesi', daysAgo: 32 }, { where: 'Salon sehpası', daysAgo: 44 }] },
-    { name: 'Eski pasaport', loc: 'Salon / TV ünitesi / Sol dolap', note: '', fav: false, hasPhoto: false, daysAgo: 60,
-      history: [{ where: 'TV ünitesi sol dolap', daysAgo: 60 }] },
-    { name: "Cemre'nin pasaportu", loc: 'Yatak odası / Komodin / Alt çekmece', note: '', fav: false, hasPhoto: true, daysAgo: 64,
-      history: [{ where: 'Komodin alt çekmece', daysAgo: 64 }] },
-  ];
+  const seeds = locale === 'en' ? SEEDS_EN : SEEDS_TR;
 
   await db.withTransactionAsync(async () => {
     for (let i = 0; i < seeds.length; i++) {
@@ -153,10 +181,10 @@ export async function setMeta(key: string, value: string): Promise<void> {
   return setMetaDb(db, key, value);
 }
 
-export async function initDb(): Promise<void> {
+export async function initDb(locale: AppLocale): Promise<void> {
   const db = await getDb();
   await migrate(db);
-  await seedIfEmpty(db);
+  await seedIfEmpty(db, locale);
 }
 
 type ItemRow = {
@@ -204,11 +232,16 @@ export type NewItemInput = {
   colorKey?: ItemColorKey;
 };
 
-async function insertItem(input: NewItemInput & { status: ItemStatus }): Promise<Item> {
+async function insertItem(
+  input: NewItemInput & { status: ItemStatus },
+  locale: AppLocale
+): Promise<Item> {
   const db = await getDb();
   const now = Date.now();
   const id = `n${now}${Math.floor(Math.random() * 1000)}`;
-  const loc = normalizeLocInput(input.loc) || input.loc.trim() || UNKNOWN_LOCATION;
+  // Stores a locale-independent marker rather than a translated UI string, so
+  // the row still reads correctly after the user switches language.
+  const loc = normalizeLocInput(input.loc, locale) || input.loc.trim() || UNKNOWN_LOCATION_TOKEN;
   const colorKey = input.colorKey || DEFAULT_ITEM_COLOR;
   const lostAt = input.status === 'lost' ? now : null;
   await db.withTransactionAsync(async () => {
@@ -229,18 +262,20 @@ async function insertItem(input: NewItemInput & { status: ItemStatus }): Promise
   };
 }
 
-export async function createItem(input: NewItemInput): Promise<Item> {
-  return insertItem({ ...input, status: 'stored' });
+export async function createItem(input: NewItemInput, locale: AppLocale): Promise<Item> {
+  return insertItem({ ...input, status: 'stored' }, locale);
 }
 
-export async function createLostItem(input: NewItemInput): Promise<Item> {
-  return insertItem({ ...input, status: 'lost' });
+export async function createLostItem(input: NewItemInput, locale: AppLocale): Promise<Item> {
+  return insertItem({ ...input, status: 'lost' }, locale);
 }
 
-export async function moveItem(id: string, rawLoc: string): Promise<{ loc: string; at: number }> {
+export async function moveItem(
+  id: string, rawLoc: string, locale: AppLocale
+): Promise<{ loc: string; at: number }> {
   const db = await getDb();
   const now = Date.now();
-  const loc = normalizeLocInput(rawLoc) || rawLoc.trim();
+  const loc = normalizeLocInput(rawLoc, locale) || rawLoc.trim();
   await db.withTransactionAsync(async () => {
     await db.runAsync('UPDATE items SET loc = ?, updated_at = ? WHERE id = ?', loc, now, id);
     await db.runAsync('INSERT INTO item_history (item_id, where_text, at) VALUES (?, ?, ?)', id, lastSegment(loc), now);
@@ -287,12 +322,13 @@ export async function updateItemDetails(id: string, input: UpdateItemDetailsInpu
 export async function updateItemWithOptionalMove(
   id: string,
   input: UpdateItemDetailsInput,
+  locale: AppLocale,
   newLoc?: string
 ): Promise<void> {
   const db = await getDb();
   const now = Date.now();
   const loc = newLoc && newLoc.trim()
-    ? (normalizeLocInput(newLoc) || newLoc.trim())
+    ? (normalizeLocInput(newLoc, locale) || newLoc.trim())
     : null;
 
   await db.withTransactionAsync(async () => {
@@ -318,11 +354,13 @@ export async function markItemLost(id: string): Promise<number> {
 }
 
 // newLoc omitted/blank -> stays at its last-known location, just flips back to stored.
-export async function markItemFound(id: string, newLoc?: string): Promise<{ loc: string | null }> {
+export async function markItemFound(
+  id: string, locale: AppLocale, newLoc?: string
+): Promise<{ loc: string | null }> {
   const db = await getDb();
   const now = Date.now();
   if (newLoc && newLoc.trim()) {
-    const loc = normalizeLocInput(newLoc) || newLoc.trim();
+    const loc = normalizeLocInput(newLoc, locale) || newLoc.trim();
     await db.withTransactionAsync(async () => {
       await db.runAsync('UPDATE items SET loc = ?, status = ?, lost_at = NULL, updated_at = ? WHERE id = ?', loc, 'stored', now, id);
       await db.runAsync('INSERT INTO item_history (item_id, where_text, at) VALUES (?, ?, ?)', id, lastSegment(loc), now);

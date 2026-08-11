@@ -8,14 +8,20 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "backgroundColor": "#F7F5F0",
+    "locales": {
+      "tr": "./locales/tr.json",
+      "en": "./locales/en.json"
+    },
     "ios": {
       "bundleIdentifier": "com.bekircankulluoglu.depo",
       "supportsTablet": false,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "Eşya adını veya konumunu sesle kaydedebilmek için mikrofona ihtiyaç var.",
-        "NSSpeechRecognitionUsageDescription": "Söylediklerini yazıya çevirmek için konuşma tanımaya ihtiyaç var.",
-        "NSCameraUsageDescription": "Eşyanın fotoğrafını çekebilmek için kameraya ihtiyaç var.",
-        "NSPhotoLibraryUsageDescription": "Galeriden fotoğraf seçebilmek için galeriye ihtiyaç var.",
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleAllowMixedLocalizations": true,
+        "NSMicrophoneUsageDescription": "Depo needs microphone access to let you add item names or locations by voice.",
+        "NSSpeechRecognitionUsageDescription": "Depo needs speech recognition to turn what you say into text.",
+        "NSCameraUsageDescription": "Depo needs camera access so you can take photos of your items.",
+        "NSPhotoLibraryUsageDescription": "Depo needs photo library access so you can choose item photos.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -43,17 +49,26 @@
     },
     "plugins": [
       [
+        "expo-localization",
+        {
+          "supportedLocales": {
+            "ios": ["tr", "en"],
+            "android": ["tr", "en"]
+          }
+        }
+      ],
+      [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Eşya adını veya konumunu sesle kaydedebilmek için mikrofona ihtiyaç var.",
-          "speechRecognitionPermission": "Söylediklerini yazıya çevirmek için konuşma tanımaya ihtiyaç var."
+          "microphonePermission": "Depo needs microphone access to let you add item names or locations by voice.",
+          "speechRecognitionPermission": "Depo needs speech recognition to turn what you say into text."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Galeriden fotoğraf seçebilmek için galeriye ihtiyaç var.",
-          "cameraPermission": "Eşyanın fotoğrafını çekebilmek için kameraya ihtiyaç var."
+          "photosPermission": "Depo needs photo library access so you can choose item photos.",
+          "cameraPermission": "Depo needs camera access so you can take photos of your items."
         }
       ]
     ]

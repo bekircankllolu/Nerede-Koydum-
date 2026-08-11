@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from './src/theme';
+import { I18nProvider } from './src/i18n/I18nProvider';
 import { DepoProvider, useDepo } from './src/state/DepoContext';
 import { Spinner } from './src/components/common';
 import TabBar from './src/components/TabBar';
@@ -73,10 +74,15 @@ function Root() {
 export default function App() {
   return (
     <GestureHandlerRootView style={styles.flex}>
+      {/* Localization wraps the store, not the other way round: DepoContext
+          reads `t`/`locale` from it, while the store's own database boot
+          stays independent of anything the localization layer does. */}
       <SafeAreaProvider>
-        <DepoProvider>
-          <Root />
-        </DepoProvider>
+        <I18nProvider>
+          <DepoProvider>
+            <Root />
+          </DepoProvider>
+        </I18nProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

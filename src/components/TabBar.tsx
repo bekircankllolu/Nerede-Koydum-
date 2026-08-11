@@ -6,14 +6,16 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, motion, spacing, typography } from '../theme';
 import { useDepo, type Screen } from '../state/DepoContext';
+import { useI18n } from '../i18n/I18nProvider';
+import type { TranslationKey } from '../i18n';
 import { haptics } from '../lib/haptics';
 import { TabFindIcon, TabItemsIcon, TabLostIcon, TabSettingsIcon } from './icons';
 
-const TABS: { key: Screen; label: string; Icon: typeof TabFindIcon }[] = [
-  { key: 'find', label: 'Bul', Icon: TabFindIcon },
-  { key: 'items', label: 'Eşyalar', Icon: TabItemsIcon },
-  { key: 'lost', label: 'Kayıplar', Icon: TabLostIcon },
-  { key: 'settings', label: 'Ayarlar', Icon: TabSettingsIcon },
+const TABS: { key: Screen; labelKey: TranslationKey; Icon: typeof TabFindIcon }[] = [
+  { key: 'find', labelKey: 'tabs.find', Icon: TabFindIcon },
+  { key: 'items', labelKey: 'tabs.items', Icon: TabItemsIcon },
+  { key: 'lost', labelKey: 'tabs.lost', Icon: TabLostIcon },
+  { key: 'settings', labelKey: 'tabs.settings', Icon: TabSettingsIcon },
 ];
 
 function Tab({
@@ -58,20 +60,21 @@ function Tab({
 
 export default function TabBar() {
   const { screen, nav, accent } = useDepo();
+  const { t } = useI18n();
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-      {TABS.map((t) => (
+      {TABS.map((tab) => (
         <Tab
-          key={t.key}
-          label={t.label}
-          Icon={t.Icon}
-          active={screen === t.key}
+          key={tab.key}
+          label={t(tab.labelKey)}
+          Icon={tab.Icon}
+          active={screen === tab.key}
           accent={accent}
           onPress={() => {
-            if (screen !== t.key) haptics.selection();
-            nav({ screen: t.key, q: '' });
+            if (screen !== tab.key) haptics.selection();
+            nav({ screen: tab.key, q: '' });
           }}
         />
       ))}
