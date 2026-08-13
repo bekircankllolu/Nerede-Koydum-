@@ -42,6 +42,11 @@ export const colors = {
   lost: '#C0392B',
   lostSoft: '#FBE7E4',
   success: '#2D7A59',
+  // Status-panel tint pair for `success` — same soft/border relationship
+  // `lostSoft` already has to `lost`, just at a much lighter tint since this
+  // is a calm confirmation state, not a warning.
+  successSoft: '#EAF3EE',
+  successBorder: '#CFE2D8',
 
   paywallBg: '#161616',
   paywallCheck: '#8B8CEB',
