@@ -135,13 +135,18 @@ export default function SettingsScreen() {
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{t('settings.title')}</Text>
 
-      {/* Same surface either way, but an active Pro user has nothing left to
-          buy — the card becomes a plain status panel rather than a CTA that
-          leads back into the purchase screen. */}
+      {/* An active Pro user has nothing left to buy, so this isn't the same
+          dark purchase surface with different copy — it's a distinct, calm
+          success status panel. Plain View, no onPress: read-only. */}
       {isPro ? (
-        <View style={styles.proCard}>
-          <Text style={styles.proTitle}>{t('pro.activeTitle')}</Text>
-          <Text style={styles.proSub}>{t('pro.activeBody')}</Text>
+        <View style={styles.proActiveCard}>
+          <View style={styles.proActiveIcon}>
+            <CheckIcon size={16} color={colors.success} />
+          </View>
+          <View style={styles.proActiveText}>
+            <Text style={styles.proActiveTitle}>{t('pro.activeTitle')}</Text>
+            <Text style={styles.proActiveSub}>{t('pro.activeBody')}</Text>
+          </View>
         </View>
       ) : (
         <Pressable
@@ -223,6 +228,21 @@ const styles = StyleSheet.create({
   proCard: { borderRadius: radii.lg, backgroundColor: colors.paywallBg, padding: spacing.xl, gap: spacing.xs + 2 },
   proTitle: { ...typography.headline, color: '#fff' },
   proSub: { ...typography.footnote, color: 'rgba(255,255,255,0.68)' },
+  // Deliberately not `surfaces.card`: that's a hairline-only neutral, and
+  // this needs to read as "success" on sight, not just structurally match
+  // the settings rows below it.
+  proActiveCard: {
+    borderRadius: radii.lg, backgroundColor: colors.successSoft,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.successBorder,
+    padding: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+  },
+  proActiveIcon: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: colors.successBorder,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  proActiveText: { flex: 1, gap: 2 },
+  proActiveTitle: { ...typography.headline, color: colors.success },
+  proActiveSub: { ...typography.footnote, color: colors.textSecondary },
   section: { marginTop: spacing.xl },
   sectionLabel: {
     ...typography.overline, color: colors.textTertiary,
