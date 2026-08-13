@@ -219,8 +219,11 @@ export const en: TranslationTree = {
     languageSheetTitle: 'App language',
     languageAuto: 'Automatic',
     languageAutoHint: 'Follow device language',
+    languageAutoResolved: '{{auto}} · {{resolved}}',
     languageTr: 'Türkçe',
     languageEn: 'English',
+    versionValue: '{{version}} · Build {{build}}',
+    sectionDanger: 'CAUTION',
   },
 
   pro: {
@@ -228,6 +231,7 @@ export const en: TranslationTree = {
     upgradeBody: 'Remove the {{limit}} item limit and export your data. One-time purchase.',
     activeTitle: 'Depo Pro · Active',
     activeBody: 'Unlimited items and CSV export are unlocked.',
+    lifetimeBadge: 'LIFETIME',
     paywallClose: 'Not now',
     paywallTitle: 'Remember where everything is.',
     paywallSubtitle: 'You’ve saved {{limit}} items on the free plan. Keep going, without limits.',

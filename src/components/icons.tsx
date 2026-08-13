@@ -155,6 +155,85 @@ export function HistoryIcon({ size = 19, color = '#6E6E73' }: IconProps) {
   );
 }
 
+// Settings-row glyphs: same 24-unit grid and round-capped stroke language as
+// the rest of icons.tsx, kept intentionally plain (no extra detail) since
+// they sit small and muted next to a label.
+
+export function ExportIcon({ size = 18, color = '#6E6E73' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 3.2v11" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M8 7.2L12 3.2l4 4" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M5 12.5v5.3a2 2 0 002 2h10a2 2 0 002-2v-5.3" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function GlobeIcon({ size = 18, color = '#6E6E73' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={8.3} stroke={color} strokeWidth={1.8} />
+      <Path d="M3.7 12h16.6" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Path d="M12 3.7c3 2.2 3 14.4 0 16.6c-3-2.2-3-14.4 0-16.6z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function LockIcon({ size = 18, color = '#6E6E73' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x={5.5} y={10.5} width={13} height={9.5} rx={2.5} stroke={color} strokeWidth={1.8} />
+      <Path d="M8 10.5V7.5a4 4 0 018 0v3" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      <Circle cx={12} cy={15} r={1.2} fill={color} />
+    </Svg>
+  );
+}
+
+export function RestoreIcon({ size = 18, color = '#6E6E73' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4.8 12a7.2 7.2 0 1 1 2.1 5.1"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M4.3 16.4V12h4.4" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function HelpIcon({ size = 18, color = '#6E6E73' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx={12} cy={12} r={8.5} stroke={color} strokeWidth={1.8} />
+      <Path
+        d="M9.5 9.7a2.5 2.5 0 114.3 1.7c-.75.7-1.5 1.15-1.5 2.3"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={12.3} cy={16.9} r={1.1} fill={color} />
+    </Svg>
+  );
+}
+
+export function ShieldIcon({ size = 18, color = '#5556D9' }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 3.5l7 2.6v5.4c0 4.6-3 7.9-7 9-4-1.1-7-4.4-7-9V6.1l7-2.6z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Path d="M9 12.3l2.1 2.1L15.3 10" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
 export function PencilIcon({ size = 18, color = '#5556D9' }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
