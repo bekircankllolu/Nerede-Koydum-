@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Depo — Destek</title>
+<style>
+  :root {
+    --bg: #FAFAF8;
+    --card: #FFFFFF;
+    --text: #1C1C1E;
+    --muted: #6E6E73;
+    --accent: #7C6FF0;
+    --border: #E5E5EA;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 56px 24px 80px;
+  }
+  .logo {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 26px;
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 4px;
+  }
+  .sub {
+    color: var(--muted);
+    margin: 0 0 36px;
+    font-size: 15px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px 24px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .card p { margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  a.email {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  a.email:hover { text-decoration: underline; }
+  .faq dt {
+    font-weight: 600;
+    margin-top: 14px;
+  }
+  .faq dt:first-child { margin-top: 0; }
+  .faq dd {
+    margin: 4px 0 0;
+    color: var(--muted);
+  }
+  hr.divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 40px 0;
+  }
+  .lang-toggle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 36px;
+  }
+  .lang-toggle a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  footer {
+    margin-top: 48px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  section[lang="en"] { display: none; }
+  body.en section[lang="tr"] { display: none; }
+  body.en section[lang="en"] { display: block; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">D</div>
+
+    <div class="lang-toggle">
+      <span id="toggle-tr" style="display:none;">Türkçe: <a href="#" onclick="setLang('tr');return false;">göster</a></span>
+      <span id="toggle-en">English: <a href="#" onclick="setLang('en');return false;">show</a></span>
+    </div>
+
+    <section lang="tr">
+      <h1>Depo — Destek</h1>
+      <p class="sub">Eşyalarını nereye koyduğunu unutmaman için geliştirilen iOS uygulaması.</p>
+
+      <div class="card">
+        <h2>İletişim</h2>
+        <p>Sorunuz, öneriniz ya da bir hata bildiriminiz mi var? Bize doğrudan yazabilirsiniz:</p>
+        <p><a class="email" href="mailto:bekircankllolu@gmail.com">bekircankllolu@gmail.com</a></p>
+      </div>
+
+      <div class="card faq">
+        <h2>Sık Sorulan Sorular</h2>
+        <dl>
+          <dt>Verilerim nerede saklanıyor?</dt>
+          <dd>Tüm eşya verilerin, fotoğrafların ve konum geçmişin yalnızca kendi cihazında saklanır. Hiçbir sunucuya gönderilmez.</dd>
+
+          <dt>Hesap açmam gerekiyor mu?</dt>
+          <dd>Hayır. Depo'yu kullanmak için giriş yapman ya da bir hesap oluşturman gerekmez.</dd>
+
+          <dt>Depo Pro nedir?</dt>
+          <dd>Depo Pro, sınırsız eşya eklemeni ve CSV dışa aktarmayı açan tek seferlik (ömür boyu) bir satın alma işlemidir. Abonelik değildir.</dd>
+
+          <dt>Satın alımımı nasıl geri yüklerim?</dt>
+          <dd>Ayarlar → Depo Pro → "Satın almayı geri yükle" adımını kullanarak önceki satın alımını aynı Apple hesabıyla geri yükleyebilirsin.</dd>
+
+          <dt>Bir hata ile mi karşılaştın?</dt>
+          <dd>Lütfen yukarıdaki e-posta adresine, cihaz modelini ve yaşadığın sorunu kısaca yazarak ulaş; en kısa sürede döneriz.</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section lang="en">
+      <h1>Depo — Support</h1>
+      <p class="sub">An iOS app that helps you remember where you put your things.</p>
+
+      <div class="card">
+        <h2>Contact</h2>
+        <p>Have a question, a suggestion, or found a bug? Reach us directly:</p>
+        <p><a class="email" href="mailto:bekircankllolu@gmail.com">bekircankllolu@gmail.com</a></p>
+      </div>
+
+      <div class="card faq">
+        <h2>Frequently Asked Questions</h2>
+        <dl>
+          <dt>Where is my data stored?</dt>
+          <dd>All your item data, photos, and location history are stored only on your device. Nothing is sent to any server.</dd>
+
+          <dt>Do I need to create an account?</dt>
+          <dd>No. Depo doesn't require sign-in or an account to use.</dd>
+
+          <dt>What is Depo Pro?</dt>
+          <dd>Depo Pro is a one-time (lifetime) purchase that unlocks unlimited items and CSV export. It is not a subscription.</dd>
+
+          <dt>How do I restore my purchase?</dt>
+          <dd>Go to Settings → Depo Pro → "Restore Purchase" to restore a previous purchase on the same Apple account.</dd>
+
+          <dt>Ran into a bug?</dt>
+          <dd>Please email us at the address above with your device model and a short description of the issue — we'll get back to you as soon as possible.</dd>
+        </dl>
+      </div>
+    </section>
+
+    <footer>© 2026 Bekir Can Küllüoğlu</footer>
+  </div>
+
+  <script>
+    function setLang(lang) {
+      document.body.classList.toggle('en', lang === 'en');
+      document.getElementById('toggle-tr').style.display = lang === 'en' ? 'inline' : 'none';
+      document.getElementById('toggle-en').style.display = lang === 'en' ? 'none' : 'inline';
+    }
+  </script>
+</body>
+</html>
