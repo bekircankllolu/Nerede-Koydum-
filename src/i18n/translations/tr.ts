@@ -217,8 +217,11 @@ export const tr = {
     languageSheetTitle: 'Uygulama dili',
     languageAuto: 'Otomatik',
     languageAutoHint: 'Cihaz dilini kullan',
+    languageAutoResolved: '{{auto}} · {{resolved}}',
     languageTr: 'Türkçe',
     languageEn: 'English',
+    versionValue: '{{version}} · Build {{build}}',
+    sectionDanger: 'DİKKAT',
   },
 
   pro: {
@@ -226,6 +229,7 @@ export const tr = {
     upgradeBody: '{{limit}} eşya sınırını kaldır ve verilerini dışa aktar. Tek seferlik ödeme.',
     activeTitle: 'Depo Pro · Etkin',
     activeBody: 'Sınırsız eşya ve CSV dışa aktarma açık.',
+    lifetimeBadge: 'ÖMÜR BOYU',
     paywallClose: 'Şimdilik değil',
     paywallTitle: 'Her şeyin yerini hatırla.',
     paywallSubtitle: 'Ücretsiz hesabında {{limit}} eşya kaydettin. Depo Pro ile sınırsız devam et.',
